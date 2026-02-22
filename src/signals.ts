@@ -19,10 +19,12 @@ const x3 = (t: number[]): number[] => {
   });
 };
 
+// U(t-2) : échelon → s'étend sur [2, +∞[, énergie infinie, puissance = 1
 const x4 = (t: number[]): number[] => {
   return t.map(ti => (ti >= 2 ? 1 : 0));
 };
 
+// U(3-t) : échelon inversé → s'étend sur ]-∞, 3], énergie infinie, puissance = 1
 const x5 = (t: number[]): number[] => {
   return t.map(ti => (ti <= 3 ? 1 : 0));
 };
@@ -34,8 +36,8 @@ const x6 = (t: number[]): number[] => {
     return (1 / (epsilon * Math.sqrt(2 * Math.PI))) * exp;
   };
   return t.map(ti =>
-    2 * deltaApprox(ti, -1) - deltaApprox(ti, 2) +
-    deltaApprox(ti, 0) - 2 * deltaApprox(ti, 1)
+      2 * deltaApprox(ti, -1) - deltaApprox(ti, 2) +
+      deltaApprox(ti, 0) - 2 * deltaApprox(ti, 1)
   );
 };
 
@@ -55,12 +57,15 @@ const x9 = (t: number[]): number[] => {
   return t.map(ti => rect(ti / 2) - tri(ti));
 };
 
+// exp(-t)u(t-2) : intégrale de 2 à +∞ converge → énergie finie
+// On l'étend sur une grande fenêtre pour l'approcher numériquement
 const x10 = (t: number[]): number[] => {
   return t.map(ti => Math.exp(-ti) * (ti >= 2 ? 1 : 0));
 };
 
+// sin(4πt) : sinusoïde pure → s'étend sur ]-∞, +∞[, énergie infinie, puissance finie = 1/2
 const x11 = (t: number[]): number[] => {
-  return t.map(() => Math.sin(4 * Math.PI));
+  return t.map(ti => Math.sin(4 * Math.PI * ti));
 };
 
 const x12 = (t: number[]): number[] => {
@@ -69,16 +74,21 @@ const x12 = (t: number[]): number[] => {
 };
 
 export const SIGNALS: SignalsDict = {
-  'x1(t)': { func: x1, formula: '2Rect(2t-1)' },
-  'x2(t)': { func: x2, formula: 'sin(πt)Rect(t/2)' },
-  'x3(t)': { func: x3, formula: 'Tri(2t)' },
-  'x4(t)': { func: x4, formula: 'U(t-2)' },
-  'x5(t)': { func: x5, formula: 'U(3-t)' },
-  'x6(t)': { func: x6, formula: '2δ(t+1)-δ(t-2)+δ(t)-2δ(t-1)' },
-  'x7(t)': { func: x7, formula: 'Rect((t-1)/2)-Rect((t+1)/2)' },
-  'x8(t)': { func: x8, formula: 'Tri(t-1)-Tri(t+1)' },
-  'x9(t)': { func: x9, formula: 'Rect(t/2)-Tri(t)' },
-  'x10(t)': { func: x10, formula: 'exp(-t)u(t-2)' },
-  'x11(t)': { func: x11, formula: 'sin(4π)' },
-  'x12(t)': { func: x12, formula: 'R(t+1)-2R(t)+R(t-1)' },
+  // Signaux à support borné → énergie finie
+  'x1(t)':  { func: x1,  formula: '2Rect(2t-1)',                      duration: 'finite'   },
+  'x2(t)':  { func: x2,  formula: 'sin(πt)Rect(t/2)',                 duration: 'finite'   },
+  'x3(t)':  { func: x3,  formula: 'Tri(2t)',                           duration: 'finite'   },
+  'x6(t)':  { func: x6,  formula: '2δ(t+1)-δ(t-2)+δ(t)-2δ(t-1)',     duration: 'finite'   },
+  'x7(t)':  { func: x7,  formula: 'Rect((t-1)/2)-Rect((t+1)/2)',      duration: 'finite'   },
+  'x8(t)':  { func: x8,  formula: 'Tri(t-1)-Tri(t+1)',                duration: 'finite'   },
+  'x9(t)':  { func: x9,  formula: 'Rect(t/2)-Tri(t)',                  duration: 'finite'   },
+  'x11(t)': { func: x11, formula: 'sin(4πt)',                          duration: 'infinite' },
+  'x12(t)': { func: x12, formula: 'R(t+1)-2R(t)+R(t-1)',              duration: 'finite'   },
+
+  // exp(-t)u(t-2) : intégrale converge sur [2,+∞[ → énergie finie
+  'x10(t)': { func: x10, formula: 'exp(-t)u(t-2)',                     duration: 'finite'   },
+
+  // Échelons → s'étendent à l'infini → énergie infinie, puissance finie
+  'x4(t)':  { func: x4,  formula: 'U(t-2)',                            duration: 'infinite' },
+  'x5(t)':  { func: x5,  formula: 'U(3-t)',                            duration: 'infinite' },
 };
