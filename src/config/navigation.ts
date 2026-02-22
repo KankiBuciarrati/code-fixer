@@ -1,6 +1,7 @@
 import { TPSection } from '@/types';
 import { SignalAnalysisView } from '@/components/dsp/SignalAnalysisView';
 import { CustomSignalView } from '@/components/dsp/CustomSignalView';
+import { SignalDecompositionView } from '@/components/dsp/SignalDecompositionView';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -22,6 +23,13 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Signal Personnalisé',
         description: 'Créez et analysez vos propres signaux',
         component: CustomSignalView,
+      },
+      {
+        id: 'tp1-exo3',
+        number: 3,
+        title: 'Décomposition en Signaux Élémentaires',
+        description: 'Exprimer les signaux en fonction de Rect, Tri, U, δ et R',
+        component: SignalDecompositionView,
       },
     ],
   },

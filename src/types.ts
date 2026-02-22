@@ -1,6 +1,7 @@
 export interface Signal {
   func: (t: number[]) => number[];
   formula: string;
+  duration?: 'finite' | 'infinite';
 }
 
 export interface SignalsDict {
