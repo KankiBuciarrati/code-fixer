@@ -2,6 +2,7 @@ import { TPSection } from '@/types';
 import { SignalAnalysisView } from '@/components/dsp/SignalAnalysisView';
 import { CustomSignalView } from '@/components/dsp/CustomSignalView';
 import { SignalDecompositionView } from '@/components/dsp/SignalDecompositionView';
+import { SignalDerivativesView } from '@/components/dsp/SignalDerivativesView';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -30,6 +31,13 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Décomposition en Signaux Élémentaires',
         description: 'Exprimer les signaux en fonction de Rect, Tri, U, δ et R',
         component: SignalDecompositionView,
+      },
+      {
+        id: 'tp1-exo4',
+        number: 4,
+        title: 'Dérivées de x14(t)',
+        description: 'Visualiser la première et deuxième dérivée du signal triangle x14(t)',
+        component: SignalDerivativesView,
       },
     ],
   },
