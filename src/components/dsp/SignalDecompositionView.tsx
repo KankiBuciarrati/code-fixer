@@ -1,86 +1,47 @@
 import React, { useState } from 'react';
 import { linspace } from '@/utils/signalAnalysis';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { motion } from 'framer-motion';
 
 // ─── Partie 1 : U(t) en fonction de sgn(t) ───────────────────────────────────
-
 const sgn = (t: number): number => (t > 0 ? 1 : t < 0 ? -1 : 0);
 const U_from_sgn = (t: number): number => (1 + sgn(t)) / 2;
 const U = (t: number): number => (t >= 0 ? 1 : 0);
 
 // ─── Partie 2 : Rect(2t) en fonction de U(t) ─────────────────────────────────
-
-// Rect(2t) = U(t + 1/4) - U(t - 1/4)
 const Rect2t_from_U = (t: number): number => U(t + 0.25) - U(t - 0.25);
 const Rect2t = (t: number): number => (Math.abs(2 * t) < 0.5 ? 1 : 0);
 
-// ─── Partie 3 : Signaux avec Dirac ───────────────────────────────────────────
+// ─── Partie 3 : x14(t) et ses dérivées ───────────────────────────────────────
+// x14(t) = Tri(t) : signal triangle
+const x14 = (t: number): number => Math.abs(t) < 1 ? 1 - Math.abs(t) : 0;
 
-// x(t) = (t³ - 2t + 5)δ(3-t) = (27 - 6 + 5)δ(t-3) = 26·δ(t-3)
-// y(t) = (cos(πt) - t)δ(1-t) = (cos(π) - 1)δ(t-1) = (-1-1)δ(t-1) = -2·δ(t-1)
-// z(t) = (2t - 1)δ(t - 2) = (4-1)δ(t-2) = 3·δ(t-2)
-// w(t) = Rect(t) * δ(t-2) = Rect(t-2) (convolution shifts by 2)
+function numericalDerivative(func: (t: number) => number, t: number, h = 1e-5): number {
+  return (func(t + h) - func(t - h)) / (2 * h);
+}
 
-const deltaApprox = (t: number, t0: number): number => {
-  const eps = 0.02;
-  return (1 / (eps * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * ((t - t0) / eps) ** 2);
-};
+const x14_d1 = (t: number): number => numericalDerivative(x14, t);
+const x14_d2 = (t: number): number => numericalDerivative(x14_d1, t);
 
-const signalX = (t: number): number => (t ** 3 - 2 * t + 5) * deltaApprox(t, 3);
-const signalY = (t: number): number => (Math.cos(Math.PI * t) - t) * deltaApprox(t, 1);
-const signalZ = (t: number): number => (2 * t - 1) * deltaApprox(t, 2);
-const signalW = (t: number): number => (Math.abs(t - 2) <= 0.5 ? 1 : 0); // Rect(t-2)
-
-const PART3_SIGNALS: { name: string; formula: string; func: (t: number) => number; explanation: string; color: string }[] = [
-  {
-    name: 'x(t)',
-    formula: '(t³ - 2t + 5)δ(3-t)',
-    func: signalX,
-    explanation: 'f(t)δ(t₀-t) = f(t₀)δ(t-t₀) → f(3)=26, donc x(t) = 26·δ(t-3)',
-    color: 'hsl(var(--primary))',
-  },
-  {
-    name: 'y(t)',
-    formula: '(cos(πt) - t)δ(1-t)',
-    func: signalY,
-    explanation: 'f(1) = cos(π)-1 = -2, donc y(t) = -2·δ(t-1)',
-    color: 'hsl(210, 90%, 60%)',
-  },
-  {
-    name: 'z(t)',
-    formula: '(2t - 1)δ(t - 2)',
-    func: signalZ,
-    explanation: 'f(2) = 4-1 = 3, donc z(t) = 3·δ(t-2)',
-    color: 'hsl(340, 80%, 55%)',
-  },
-  {
-    name: 'w(t)',
-    formula: 'Rect(t) * δ(t-2)',
-    func: signalW,
-    explanation: 'Convolution : f(t)*δ(t-a) = f(t-a), donc w(t) = Rect(t-2)',
-    color: 'hsl(150, 70%, 45%)',
-  },
-];
+// ─────────────────────────────────────────────────────────────────────────────
 
 type ActivePart = 'part1' | 'part2' | 'part3';
 
 export const SignalDecompositionView: React.FC = () => {
   const [activePart, setActivePart] = useState<ActivePart>('part1');
-  const [selectedPart3, setSelectedPart3] = useState(0);
 
   const parts: { id: ActivePart; label: string; icon: string }[] = [
     { id: 'part1', label: 'U(t) = f(sgn(t))', icon: '1️⃣' },
     { id: 'part2', label: 'Rect(2t) = f(U(t))', icon: '2️⃣' },
-    { id: 'part3', label: 'Visualisation δ(t)', icon: '3️⃣' },
+    { id: 'part3', label: 'Dérivées de x14(t)', icon: '3️⃣' },
   ];
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Décomposition & Propriétés du Dirac</h1>
+        <h1 className="text-2xl font-bold text-foreground">Décomposition en Signaux Élémentaires</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Expression de signaux en fonction de signaux élémentaires et propriétés de δ(t)
+          Expression de signaux en fonction de signaux élémentaires et analyse des dérivées
         </p>
       </div>
 
@@ -105,9 +66,7 @@ export const SignalDecompositionView: React.FC = () => {
       <div className="signal-card p-6">
         {activePart === 'part1' && <Part1View />}
         {activePart === 'part2' && <Part2View />}
-        {activePart === 'part3' && (
-          <Part3View selected={selectedPart3} onSelect={setSelectedPart3} />
-        )}
+        {activePart === 'part3' && <Part3View />}
       </div>
     </motion.div>
   );
@@ -119,7 +78,6 @@ export const SignalDecompositionView: React.FC = () => {
 
 const Part1View: React.FC = () => {
   const t = linspace(-3, 3, 500);
-
   const data = t.map((ti) => ({
     t: parseFloat(ti.toFixed(3)),
     'sgn(t)': sgn(ti),
@@ -129,7 +87,6 @@ const Part1View: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Explanation */}
       <div className="bg-primary/5 border border-primary/20 rounded-xl p-5">
         <h3 className="font-semibold text-foreground mb-2">🧮 Démonstration</h3>
         <div className="space-y-2 text-sm text-muted-foreground">
@@ -148,7 +105,6 @@ const Part1View: React.FC = () => {
         </div>
       </div>
 
-      {/* Charts side by side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-background rounded-xl border border-border p-4">
           <h4 className="text-sm font-semibold text-muted-foreground mb-3">sgn(t)</h4>
@@ -190,7 +146,6 @@ const Part1View: React.FC = () => {
 
 const Part2View: React.FC = () => {
   const t = linspace(-2, 2, 500);
-
   const data = t.map((ti) => ({
     t: parseFloat(ti.toFixed(3)),
     'Rect(2t)': Rect2t(ti),
@@ -252,92 +207,105 @@ const Part2View: React.FC = () => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Partie 3 : Visualisation des signaux avec δ(t)
+// Partie 3 : x14(t) et ses dérivées
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const Part3View: React.FC<{ selected: number; onSelect: (i: number) => void }> = ({ selected, onSelect }) => {
-  const sig = PART3_SIGNALS[selected];
-  const tStart = -2;
-  const tEnd = 6;
-  const t = linspace(tStart, tEnd, 1000);
+const Part3View: React.FC = () => {
+  const t = linspace(-5, 5, 1000);
 
-  const data = t.map((ti) => ({
-    t: parseFloat(ti.toFixed(3)),
-    value: (() => { const v = sig.func(ti); return isFinite(v) ? v : null; })(),
-  }));
+  const data = t.map((ti) => {
+    const v = x14(ti);
+    const d1 = x14_d1(ti);
+    const d2 = x14_d2(ti);
+    return {
+      t: parseFloat(ti.toFixed(3)),
+      'x14(t)': isFinite(v) ? parseFloat(v.toFixed(5)) : null,
+      "x14'(t)": isFinite(d1) ? parseFloat(d1.toFixed(5)) : null,
+      "x14''(t)": isFinite(d2) && Math.abs(d2) < 500 ? parseFloat(d2.toFixed(5)) : null,
+    };
+  });
+
+  const tooltipStyle = {
+    backgroundColor: 'hsl(var(--card))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: '8px',
+    fontSize: '12px',
+    fontFamily: 'monospace',
+  };
 
   return (
     <div className="space-y-6">
-      {/* Signal selector */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {PART3_SIGNALS.map((s, i) => (
-          <button
-            key={i}
-            onClick={() => onSelect(i)}
-            className={`text-left p-3 rounded-lg border transition-all duration-200 ${
-              selected === i
-                ? 'border-primary/40 bg-primary/10'
-                : 'border-border bg-background hover:bg-muted/50'
-            }`}
-          >
-            <span className="font-mono text-sm font-semibold" style={{ color: s.color }}>
-              {s.name}
-            </span>
-            <p className="font-mono text-xs text-muted-foreground mt-1 truncate">{s.formula}</p>
-          </button>
-        ))}
-      </div>
-
-      {/* Explanation */}
+      {/* Theory */}
       <div className="bg-primary/5 border border-primary/20 rounded-xl p-5">
-        <h3 className="font-semibold text-foreground mb-2">🧮 {sig.name} = {sig.formula}</h3>
-        <p className="text-sm text-muted-foreground">{sig.explanation}</p>
-        {sig.name === 'w(t)' && (
-          <p className="text-xs text-muted-foreground mt-2 italic">
-            * désigne le produit de convolution
-          </p>
-        )}
+        <h3 className="font-semibold text-foreground mb-3">🧮 Signal x14(t) = Tri(t)</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+          <div className="bg-background rounded-lg p-3 border border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Signal</p>
+            <p className="font-mono text-primary">x14(t) = 1 − |t|</p>
+            <p className="text-xs text-muted-foreground mt-1">pour |t| &lt; 1, sinon 0</p>
+          </div>
+          <div className="bg-background rounded-lg p-3 border border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">1ère dérivée</p>
+            <p className="font-mono text-primary">x14'(t) = −sgn(t)</p>
+            <p className="text-xs text-muted-foreground mt-1">pour |t| &lt; 1 : +1 si t&lt;0, −1 si t&gt;0</p>
+          </div>
+          <div className="bg-background rounded-lg p-3 border border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">2ème dérivée</p>
+            <p className="font-mono text-primary">x14''(t) = δ(t+1) − 2δ(t) + δ(t−1)</p>
+            <p className="text-xs text-muted-foreground mt-1">Impulsions aux discontinuités</p>
+          </div>
+        </div>
       </div>
 
-      {/* Chart */}
+      {/* Chart 1 : signal */}
       <div className="bg-background rounded-xl border border-border p-4">
-        <ResponsiveContainer width="100%" height={400}>
-          <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+        <h4 className="text-sm font-semibold text-muted-foreground mb-3">x14(t) — Signal triangle</h4>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis
-              dataKey="t"
-              stroke="hsl(var(--muted-foreground))"
-              fontSize={12}
-              tickLine={false}
-              label={{ value: 'Temps (t)', position: 'insideBottom', offset: -10, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }}
-            />
-            <YAxis
-              stroke="hsl(var(--muted-foreground))"
-              fontSize={12}
-              tickLine={false}
-              label={{ value: 'Amplitude', angle: -90, position: 'insideLeft', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: 'hsl(var(--card))',
-                border: '1px solid hsl(var(--border))',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontFamily: 'var(--font-mono)',
-              }}
-              formatter={(value: number) => [value?.toFixed(4), sig.name]}
-              labelFormatter={(label) => `t = ${label}`}
-            />
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke={sig.color}
-              strokeWidth={2.5}
-              dot={false}
-              connectNulls={false}
-            />
+            <XAxis dataKey="t" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false}
+              label={{ value: 't', position: 'insideBottom', offset: -10, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} domain={[-0.2, 1.3]}
+              label={{ value: 'Amplitude', angle: -90, position: 'insideLeft', fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => `t = ${l}`} />
+            <Line type="monotone" dataKey="x14(t)" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} connectNulls={false} />
           </LineChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Chart 2 : première dérivée */}
+      <div className="bg-background rounded-xl border border-border p-4">
+        <h4 className="text-sm font-semibold text-muted-foreground mb-3">x14'(t) — Première dérivée</h4>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="t" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false}
+              label={{ value: 't', position: 'insideBottom', offset: -10, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} domain={[-1.5, 1.5]}
+              label={{ value: 'Amplitude', angle: -90, position: 'insideLeft', fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => `t = ${l}`} />
+            <Line type="monotone" dataKey="x14'(t)" stroke="hsl(210, 90%, 60%)" strokeWidth={2.5} dot={false} connectNulls={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Chart 3 : deuxième dérivée */}
+      <div className="bg-background rounded-xl border border-border p-4">
+        <h4 className="text-sm font-semibold text-muted-foreground mb-3">x14''(t) — Deuxième dérivée (impulsions de Dirac)</h4>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={data} margin={{ top: 10, right: 30, left: 20, bottom: 20 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="t" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false}
+              label={{ value: 't', position: 'insideBottom', offset: -10, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false}
+              label={{ value: 'Amplitude', angle: -90, position: 'insideLeft', fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => `t = ${l}`} />
+            <Line type="monotone" dataKey="x14''(t)" stroke="hsl(340, 80%, 55%)" strokeWidth={2.5} dot={false} connectNulls={false} />
+          </LineChart>
+        </ResponsiveContainer>
+        <p className="text-xs text-muted-foreground mt-2 text-center italic">
+          Les pics correspondent aux impulsions δ(t+1), −2δ(t), δ(t−1)
+        </p>
       </div>
     </div>
   );
