@@ -23,13 +23,21 @@ const PARITY_SIGNALS = [
 
 // ─── Even/Odd decomposition ───────────────────────────────────────────────────
 
-function computeParity(func: (t: number) => number, tArr: number[]) {
+const clip = (v: number, limit: number) =>
+  isFinite(v) ? Math.max(-limit, Math.min(limit, v)) : null;
+
+function computeParity(func: (t: number) => number, tArr: number[], limit: number) {
   return tArr.map((t) => {
     const xt  = func(t);
     const xmt = func(-t);
     const even = (xt + xmt) / 2;
     const odd  = (xt - xmt) / 2;
-    return { t, original: xt, even, odd };
+    return {
+      t,
+      original: clip(xt, limit),
+      even:     clip(even, limit),
+      odd:      clip(odd, limit),
+    };
   });
 }
 
@@ -41,18 +49,22 @@ const COLORS = {
   odd:      'hsl(var(--signal-amber, 38 92% 50%))',
 };
 
+// Amplitude limits per signal so the graph stays readable
+const AMPLITUDE_LIMITS = [4, 3]; // signal 1: e^{-2t}·cos(t) clips at ±4, signal 2: periodic clips at ±3
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const SignalParityView: React.FC = () => {
   const [selectedSignal, setSelectedSignal] = useState(0);
-  const [tRange, setTRange] = useState(5);
+  const [tRange, setTRange] = useState(3);
 
   const signal = PARITY_SIGNALS[selectedSignal];
+  const ampLimit = AMPLITUDE_LIMITS[selectedSignal];
 
   const data = useMemo(() => {
     const t = linspace(-tRange, tRange, 600);
-    return computeParity(signal.func, t);
-  }, [selectedSignal, tRange]);
+    return computeParity(signal.func, t, ampLimit);
+  }, [selectedSignal, tRange, ampLimit]);
 
   const charts = [
     { key: 'original', label: 'Signal original x(t)',         color: COLORS.original },
@@ -110,7 +122,7 @@ export const SignalParityView: React.FC = () => {
           Fenêtre : [−{tRange}, {tRange}]
         </span>
         <input
-          type="range" min={2} max={10} step={1}
+          type="range" min={1} max={5} step={0.5}
           value={tRange}
           onChange={(e) => setTRange(Number(e.target.value))}
           className="flex-1 accent-primary"
@@ -147,7 +159,8 @@ export const SignalParityView: React.FC = () => {
                     label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                   />
                   <YAxis
-                    tickFormatter={(v) => v.toFixed(2)}
+                    domain={[-ampLimit, ampLimit]}
+                    tickFormatter={(v) => v.toFixed(1)}
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                     width={50}
                   />
