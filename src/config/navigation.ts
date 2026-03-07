@@ -40,6 +40,13 @@ export const TP_SECTIONS: TPSection[] = [
         description: 'Visualiser la première et deuxième dérivée du signal triangle x14(t)',
         component: SignalDerivativesView,
       },
+      {
+        id: 'tp1-exo5',
+        number: 5,
+        title: 'Parties Paire et Impaire',
+        description: 'Décomposer des signaux en parties paire et impaire',
+        component: SignalParityView,
+      },
     ],
   },
 ];
