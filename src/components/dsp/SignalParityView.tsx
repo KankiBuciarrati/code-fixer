@@ -122,7 +122,7 @@ export const SignalParityView: React.FC = () => {
           Fenêtre : [−{tRange}, {tRange}]
         </span>
         <input
-          type="range" min={2} max={10} step={1}
+          type="range" min={1} max={5} step={0.5}
           value={tRange}
           onChange={(e) => setTRange(Number(e.target.value))}
           className="flex-1 accent-primary"
