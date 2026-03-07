@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { linspace } from '@/utils/signalAnalysis';
 import { motion } from 'framer-motion';
 import { FlipHorizontal } from 'lucide-react';
@@ -9,24 +9,23 @@ import { FlipHorizontal } from 'lucide-react';
 const PARITY_SIGNALS = [
   {
     id: 'x1',
-    label: 'x(t) = e^{-2t} · cos(t)',
     latex: 'x(t) = e⁻²ᵗ · cos(t)',
     func: (t: number) => Math.exp(-2 * t) * Math.cos(t),
+    defaultRange: 2,
+    maxRange: 3,
   },
   {
     id: 'x2',
-    label: 'x(t) = cos(t) + sin(t) + sin(t)cos(t)',
     latex: 'x(t) = cos(t) + sin(t) + sin(t)cos(t)',
     func: (t: number) => Math.cos(t) + Math.sin(t) + Math.sin(t) * Math.cos(t),
+    defaultRange: 5,
+    maxRange: 10,
   },
 ];
 
-// ─── Even/Odd decomposition ───────────────────────────────────────────────────
+// ─── Even/Odd decomposition (no clipping — exact numerical values) ────────────
 
-const clip = (v: number, limit: number) =>
-  isFinite(v) ? Math.max(-limit, Math.min(limit, v)) : null;
-
-function computeParity(func: (t: number) => number, tArr: number[], limit: number) {
+function computeParity(func: (t: number) => number, tArr: number[]) {
   return tArr.map((t) => {
     const xt  = func(t);
     const xmt = func(-t);
@@ -34,43 +33,45 @@ function computeParity(func: (t: number) => number, tArr: number[], limit: numbe
     const odd  = (xt - xmt) / 2;
     return {
       t,
-      original: clip(xt, limit),
-      even:     clip(even, limit),
-      odd:      clip(odd, limit),
+      original: isFinite(xt)   ? xt   : null,
+      even:     isFinite(even) ? even : null,
+      odd:      isFinite(odd)  ? odd  : null,
     };
   });
 }
 
-// ─── Chart colors via CSS vars ────────────────────────────────────────────────
+// ─── Colors ───────────────────────────────────────────────────────────────────
 
 const COLORS = {
   original: 'hsl(var(--primary))',
-  even:     'hsl(var(--signal-blue, 210 100% 60%))',
-  odd:      'hsl(var(--signal-amber, 38 92% 50%))',
+  even:     '#3b82f6',
+  odd:      '#f59e0b',
 };
-
-// Amplitude limits per signal so the graph stays readable
-const AMPLITUDE_LIMITS = [4, 3]; // signal 1: e^{-2t}·cos(t) clips at ±4, signal 2: periodic clips at ±3
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const SignalParityView: React.FC = () => {
   const [selectedSignal, setSelectedSignal] = useState(0);
-  const [tRange, setTRange] = useState(3);
-
   const signal = PARITY_SIGNALS[selectedSignal];
-  const ampLimit = AMPLITUDE_LIMITS[selectedSignal];
+
+  const [tRange, setTRange] = useState(signal.defaultRange);
+
+  // Reset range when switching signal
+  const handleSelectSignal = (i: number) => {
+    setSelectedSignal(i);
+    setTRange(PARITY_SIGNALS[i].defaultRange);
+  };
 
   const data = useMemo(() => {
-    const t = linspace(-tRange, tRange, 600);
-    return computeParity(signal.func, t, ampLimit);
-  }, [selectedSignal, tRange, ampLimit]);
+    const t = linspace(-tRange, tRange, 800);
+    return computeParity(signal.func, t);
+  }, [selectedSignal, tRange]);
 
   const charts = [
-    { key: 'original', label: 'Signal original x(t)',         color: COLORS.original },
-    { key: 'even',     label: 'Partie paire  xₑ(t)',          color: COLORS.even },
-    { key: 'odd',      label: 'Partie impaire xₒ(t)',         color: COLORS.odd },
-  ] as const;
+    { key: 'original' as const, label: 'Signal original x(t)',   color: COLORS.original },
+    { key: 'even'     as const, label: 'Partie paire  xₑ(t)',    color: COLORS.even },
+    { key: 'odd'      as const, label: 'Partie impaire xₒ(t)',   color: COLORS.odd },
+  ];
 
   return (
     <div className="space-y-6">
@@ -90,39 +91,38 @@ export const SignalParityView: React.FC = () => {
             <span className="text-foreground">xₒ(t) = [x(t) − x(−t)] / 2</span>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Propriété : x(t) = xₑ(t) + xₒ(t)
-        </p>
+        <p className="text-xs text-muted-foreground">Propriété : x(t) = xₑ(t) + xₒ(t)</p>
       </div>
 
       {/* Signal selector */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-        <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider shrink-0">Signal</span>
-        <div className="flex flex-col gap-2 w-full">
-          {PARITY_SIGNALS.map((s, i) => (
-            <button
-              key={s.id}
-              onClick={() => setSelectedSignal(i)}
-              className={`px-4 py-2.5 rounded-lg text-sm font-medium text-left transition-all border ${
-                selectedSignal === i
-                  ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80 border-transparent'
-              }`}
-            >
-              <span className="font-semibold mr-2">{i + 1})</span>
-              <span className="font-mono">{s.latex}</span>
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Signal</span>
+        {PARITY_SIGNALS.map((s, i) => (
+          <button
+            key={s.id}
+            onClick={() => handleSelectSignal(i)}
+            className={`px-4 py-2.5 rounded-lg text-sm font-medium text-left transition-all border ${
+              selectedSignal === i
+                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 border-transparent'
+            }`}
+          >
+            <span className="font-semibold mr-2">{i + 1})</span>
+            <span className="font-mono">{s.latex}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Time range */}
+      {/* Time range slider */}
       <div className="flex items-center gap-4">
         <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider shrink-0">
           Fenêtre : [−{tRange}, {tRange}]
         </span>
         <input
-          type="range" min={1} max={5} step={0.5}
+          type="range"
+          min={0.5}
+          max={signal.maxRange}
+          step={0.5}
           value={tRange}
           onChange={(e) => setTRange(Number(e.target.value))}
           className="flex-1 accent-primary"
@@ -140,10 +140,7 @@ export const SignalParityView: React.FC = () => {
             className="rounded-xl border border-border overflow-hidden"
           >
             <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center gap-2">
-              <span
-                className="inline-block w-3 h-3 rounded-full"
-                style={{ background: chart.color }}
-              />
+              <span className="inline-block w-3 h-3 rounded-full" style={{ background: chart.color }} />
               <span className="text-sm font-semibold text-foreground">{chart.label}</span>
             </div>
             <div className="p-4 bg-background">
@@ -159,10 +156,10 @@ export const SignalParityView: React.FC = () => {
                     label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                   />
                   <YAxis
-                    domain={[-ampLimit, ampLimit]}
-                    tickFormatter={(v) => v.toFixed(1)}
+                    domain={['auto', 'auto']}
+                    tickFormatter={(v) => Number(v).toFixed(2)}
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                    width={50}
+                    width={55}
                   />
                   <Tooltip
                     contentStyle={{
@@ -181,6 +178,7 @@ export const SignalParityView: React.FC = () => {
                     strokeWidth={2}
                     dot={false}
                     isAnimationActive={false}
+                    connectNulls={false}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -189,12 +187,12 @@ export const SignalParityView: React.FC = () => {
         ))}
       </div>
 
-      {/* Verification card */}
+      {/* Verification */}
       <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Vérification</p>
         <p className="text-sm text-muted-foreground">
-          Les trois courbes satisfont bien la relation <span className="font-mono text-foreground">x(t) = xₑ(t) + xₒ(t)</span>.
-          La partie paire est symétrique par rapport à l'axe des ordonnées, et la partie impaire est antisymétrique.
+          x(t) = xₑ(t) + xₒ(t) — La partie paire est symétrique par rapport à l'axe des ordonnées,
+          et la partie impaire est antisymétrique (xₒ(−t) = −xₒ(t)).
         </p>
       </div>
     </div>
