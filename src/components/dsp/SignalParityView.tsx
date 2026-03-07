@@ -159,7 +159,8 @@ export const SignalParityView: React.FC = () => {
                     label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
                   />
                   <YAxis
-                    tickFormatter={(v) => v.toFixed(2)}
+                    domain={[-ampLimit, ampLimit]}
+                    tickFormatter={(v) => v.toFixed(1)}
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                     width={50}
                   />
