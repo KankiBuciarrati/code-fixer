@@ -3,6 +3,7 @@ import { SignalAnalysisView } from '@/components/dsp/SignalAnalysisView';
 import { CustomSignalView } from '@/components/dsp/CustomSignalView';
 import { SignalDecompositionView } from '@/components/dsp/SignalDecompositionView';
 import { SignalDerivativesView } from '@/components/dsp/SignalDerivativesView';
+import { SignalParityView } from '@/components/dsp/SignalParityView';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -38,6 +39,13 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Dérivées de x14(t)',
         description: 'Visualiser la première et deuxième dérivée du signal triangle x14(t)',
         component: SignalDerivativesView,
+      },
+      {
+        id: 'tp1-exo5',
+        number: 5,
+        title: 'Parties Paire et Impaire',
+        description: 'Décomposer des signaux en parties paire et impaire',
+        component: SignalParityView,
       },
     ],
   },
