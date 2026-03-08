@@ -161,6 +161,8 @@ export const SignalParityView: React.FC = () => {
                     tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                     width={55}
                   />
+                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
+                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
                   <Tooltip
                     contentStyle={{
                       background: 'hsl(var(--card))',
