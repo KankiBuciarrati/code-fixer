@@ -11,15 +11,15 @@ const PARITY_SIGNALS = [
     id: 'x1',
     latex: 'x(t) = e⁻²ᵗ · cos(t)',
     func: (t: number) => Math.exp(-2 * t) * Math.cos(t),
-    defaultRange: 2,
-    maxRange: 3,
+    defaultRange: 4,
+    maxRange: 8,
   },
   {
     id: 'x2',
     latex: 'x(t) = cos(t) + sin(t) + sin(t)cos(t)',
     func: (t: number) => Math.cos(t) + Math.sin(t) + Math.sin(t) * Math.cos(t),
-    defaultRange: 5,
-    maxRange: 10,
+    defaultRange: 10,
+    maxRange: 20,
   },
 ];
 
