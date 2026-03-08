@@ -1,104 +1,168 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine,
+  Tooltip, ResponsiveContainer, ReferenceLine, Legend,
 } from 'recharts';
-import { linspace, calculateEnergy } from '@/utils/signalAnalysis';
+import { linspace } from '@/utils/signalAnalysis';
 import { motion } from 'framer-motion';
-import { BarChart2, BookOpen } from 'lucide-react';
+import { GitCompare } from 'lucide-react';
 
-// ─── Signal y(t) ──────────────────────────────────────────────────────────────
-// y(t) = -(t+1) pour -1 ≤ t ≤ 0  →  0 à t=-1, -1 à t=0
-//        (1-t)   pour  0 ≤ t ≤ 1  →  1 à t=0,   0 à t=1
-//        0 ailleurs
-const yFunc = (ti: number): number => {
-  if (ti >= -1 && ti <= 0) return -(ti + 1);   // descend de 0 à -1
-  if (ti > 0 && ti <= 1)   return 1 - ti;       // descend de 1 à 0
-  return 0;
-};
+// ─── Primitives ───────────────────────────────────────────────────────────────
+const u  = (t: number) => t >= 0 ? 1 : 0;
+const R  = (t: number) => t > 0 ? t : 0;   // rampe unitaire
 
-const QUESTIONS = [
+// ─── Signals catalogue ────────────────────────────────────────────────────────
+const SIGNALS = [
   {
-    num: 1,
-    question: 'Classifier ce signal.',
-    answer:
-      'y(t) est à support borné (nul hors de [−1, 1]). Son énergie est finie → signal à énergie finie (signal énergie).',
+    id: 's1',
+    name: 'Signal triangulaire y(t)',
+    original: (t: number) => {
+      if (t >= -1 && t <= 0) return -(t + 1);
+      if (t > 0  && t <= 1)  return 1 - t;
+      return 0;
+    },
+    decomp: (t: number) => R(t + 1) - 2 * R(t) + R(t - 1),
+    formula: 'y(t) = R(t+1) − 2R(t) + R(t−1)',
+    components: [
+      { label: 'R(t+1)',   color: '#3b82f6', fn: (t: number) =>  R(t + 1) },
+      { label: '−2R(t)',   color: '#f59e0b', fn: (t: number) => -2 * R(t) },
+      { label: 'R(t−1)',   color: '#10b981', fn: (t: number) =>  R(t - 1) },
+    ],
+    domain: [-3, 3] as [number, number],
   },
   {
-    num: 2,
-    question: "Déterminer l'expression analytique du signal.",
-    answer:
-      'y(t) = −(t+1)[u(t+1)−u(t)] + (1−t)[u(t)−u(t−1)]\n= R(t+1) − 2R(t) + R(t−1)  avec R(t) = t·u(t) (rampe)',
+    id: 's2',
+    name: 'Porte Rect(t/2)',
+    original: (t: number) => Math.abs(t) < 1 ? 1 : (Math.abs(t) === 1 ? 0.5 : 0),
+    decomp: (t: number) => u(t + 1) - u(t - 1),
+    formula: 'Rect(t/2) = u(t+1) − u(t−1)',
+    components: [
+      { label: 'u(t+1)',   color: '#3b82f6', fn: (t: number) => u(t + 1) },
+      { label: '−u(t−1)',  color: '#f59e0b', fn: (t: number) => -u(t - 1) },
+    ],
+    domain: [-4, 4] as [number, number],
   },
   {
-    num: 3,
-    question: 'Calculer son énergie.',
-    answer: '',   // calculé dynamiquement ci-dessous
+    id: 's3',
+    name: 'Rampe tronquée x(t)',
+    original: (t: number) => {
+      if (t >= 0 && t <= 2) return t;
+      if (t > 2 && t <= 3)  return 2;
+      return 0;
+    },
+    decomp: (t: number) => R(t) - R(t - 2) - (R(t - 2) - R(t - 3)),
+    formula: 'x(t) = R(t) − R(t−2) − [R(t−2) − R(t−3)]',
+    components: [
+      { label: 'R(t)',     color: '#3b82f6', fn: (t: number) =>  R(t) },
+      { label: '−R(t−2)',  color: '#f59e0b', fn: (t: number) => -R(t - 2) },
+      { label: '−R(t−2)', color: '#10b981', fn: (t: number) => -(R(t - 2) - R(t - 3)) },
+    ],
+    domain: [-1, 5] as [number, number],
   },
   {
-    num: 4,
-    question: 'Peut-on exprimer ce signal en fonction de Ramp et échelon ?',
-    answer:
-      'Oui : y(t) = R(t+1) − 2R(t) + R(t−1)\noù R(t) = t·u(t) est la rampe unitaire.\nCela correspond à la dérivée de la fonction triangle Tri(t).',
-  },
-  {
-    num: 5,
-    question:
-      'Comment peut-on transformer y(t) en signal périodique ? (justifier)',
-    answer:
-      "On effectue une répétition périodique par convolution avec un peigne de Dirac :\n  y_p(t) = y(t) * Σ δ(t − nT)  avec T = 2\nOu par la relation : y_p(t) = Σ y(t − nT).\nLa période naturelle est T = 2 (durée du support de y).",
+    id: 's4',
+    name: 'Échelon décalé U(t−2)',
+    original: (t: number) => t >= 2 ? 1 : 0,
+    decomp: (t: number) => u(t - 2),
+    formula: 'u(t−2)',
+    components: [
+      { label: 'u(t−2)', color: '#3b82f6', fn: (t: number) => u(t - 2) },
+    ],
+    domain: [-1, 5] as [number, number],
   },
 ];
 
+const COLORS = {
+  original: 'hsl(var(--primary))',
+  decomp:   '#f43f5e',
+};
+
 // ─── Component ────────────────────────────────────────────────────────────────
-
 export const SignalExo6View: React.FC = () => {
-  const tArr = useMemo(() => linspace(-3, 3, 1200), []);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [showComponents, setShowComponents] = useState(false);
 
-  const data = useMemo(
-    () =>
-      tArr.map((t) => ({
-        t: parseFloat(t.toFixed(4)),
-        y: yFunc(t),
-      })),
-    [],
-  );
+  const sig = SIGNALS[selectedIdx];
 
-  // Énergie analytique = 1/3 + 1/3 = 2/3
-  const energyAnalytic = 2 / 3;
-  const energyNumeric = useMemo(() => {
-    const vals = tArr.map(yFunc);
-    const dt = tArr[1] - tArr[0];
-    return calculateEnergy(vals, dt, 'simpson');
-  }, []);
+  const data = useMemo(() => {
+    const t = linspace(sig.domain[0], sig.domain[1], 1200);
+    return t.map((ti) => {
+      const row: Record<string, number | null> = { t: parseFloat(ti.toFixed(4)) };
+      row.original = sig.original(ti);
+      row.decomp   = sig.decomp(ti);
+      if (showComponents) {
+        sig.components.forEach((c, i) => { row[`c${i}`] = c.fn(ti); });
+      }
+      return row;
+    });
+  }, [selectedIdx, showComponents]);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="p-5 rounded-xl bg-primary/5 border border-primary/15 flex items-start gap-3">
-        <BarChart2 className="text-primary mt-0.5 shrink-0" size={20} />
+        <GitCompare className="text-primary mt-0.5 shrink-0" size={20} />
         <div>
           <p className="font-semibold text-foreground">
-            Exercice 6 — Signal y(t)
+            Exercice 6 — Représentation en Rampe &amp; Échelon
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            Signal triangulaire asymétrique défini sur [−1, 1], nul ailleurs.
-          </p>
-          <p className="font-mono text-sm text-primary mt-2">
-            y(t) = −(t+1)·[u(t+1)−u(t)] + (1−t)·[u(t)−u(t−1)]
+            Comparer le tracé original d'un signal avec sa décomposition analytique
+            en fonctions Rampe <span className="font-mono">R(t)</span> et Échelon <span className="font-mono">u(t)</span>.
           </p>
         </div>
       </div>
 
-      {/* Chart */}
+      {/* Signal selector */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {SIGNALS.map((s, i) => (
+          <button
+            key={s.id}
+            onClick={() => setSelectedIdx(i)}
+            className={`px-4 py-2.5 rounded-lg text-sm font-medium text-left transition-all border ${
+              selectedIdx === i
+                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 border-transparent'
+            }`}
+          >
+            <span className="font-semibold mr-2">{i + 1}.</span>
+            {s.name}
+          </button>
+        ))}
+      </div>
+
+      {/* Formula card */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1 p-4 rounded-xl bg-muted/30 border border-border">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Décomposition analytique</p>
+          <p className="font-mono text-base text-primary font-semibold">{sig.formula}</p>
+        </div>
+        <div className="flex items-center">
+          <button
+            onClick={() => setShowComponents((v) => !v)}
+            className={`px-4 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+              showComponents
+                ? 'bg-primary/10 border-primary/30 text-primary'
+                : 'bg-muted border-transparent text-muted-foreground hover:bg-muted/80'
+            }`}
+          >
+            {showComponents ? '▼ Masquer' : '▶ Voir'} les composantes
+          </button>
+        </div>
+      </div>
+
+      {/* Comparison chart */}
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        key={selectedIdx}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className="rounded-xl border border-border overflow-hidden"
       >
-        <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center gap-2">
-          <span className="inline-block w-3 h-3 rounded-full bg-primary" />
-          <span className="text-sm font-semibold text-foreground">Tracé du signal y(t)</span>
+        <div className="px-4 py-3 bg-muted/40 border-b border-border">
+          <p className="text-sm font-semibold text-foreground">Comparaison : signal original vs décomposition</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Les deux courbes doivent se superposer parfaitement pour valider la décomposition.
+          </p>
         </div>
         <div className="p-4 bg-background">
           <ResponsiveContainer width="100%" height={380}>
@@ -107,22 +171,18 @@ export const SignalExo6View: React.FC = () => {
               <XAxis
                 dataKey="t"
                 type="number"
-                domain={[-3, 3]}
-                ticks={[-3, -2, -1, 0, 1, 2, 3]}
-                tickFormatter={(v) => v.toFixed(0)}
-                tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+                domain={sig.domain}
+                tickFormatter={(v) => v.toFixed(1)}
+                tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
                 label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }}
               />
               <YAxis
-                domain={[-1.2, 1.2]}
-                ticks={[-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]}
-                tickFormatter={(v) => v.toFixed(2)}
+                tickFormatter={(v) => Number(v).toFixed(1)}
                 tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                label={{ value: 'y(t)', angle: -90, position: 'insideLeft', offset: 10, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }}
-                width={55}
+                width={45}
               />
-              <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.5} strokeWidth={1.5} />
-              <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.5} strokeWidth={1.5} />
+              <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
+              <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
               <Tooltip
                 contentStyle={{
                   background: 'hsl(var(--card))',
@@ -130,75 +190,60 @@ export const SignalExo6View: React.FC = () => {
                   borderRadius: '8px',
                   fontSize: '12px',
                 }}
-                formatter={(v: number) => [v.toFixed(4), 'y(t)']}
                 labelFormatter={(l) => `t = ${Number(l).toFixed(3)}`}
               />
+              <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+
+              {/* Original signal */}
               <Line
                 type="linear"
-                dataKey="y"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2.5}
+                dataKey="original"
+                name="Signal original"
+                stroke={COLORS.original}
+                strokeWidth={3}
                 dot={false}
                 isAnimationActive={false}
-                connectNulls={false}
               />
+
+              {/* Decomposition */}
+              <Line
+                type="linear"
+                dataKey="decomp"
+                name="Décomposition R/u(t)"
+                stroke={COLORS.decomp}
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                dot={false}
+                isAnimationActive={false}
+              />
+
+              {/* Optional components */}
+              {showComponents &&
+                sig.components.map((c, i) => (
+                  <Line
+                    key={`c${i}`}
+                    type="linear"
+                    dataKey={`c${i}`}
+                    name={c.label}
+                    stroke={c.color}
+                    strokeWidth={1.5}
+                    strokeDasharray="2 4"
+                    dot={false}
+                    isAnimationActive={false}
+                    opacity={0.7}
+                  />
+                ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
       </motion.div>
 
-      {/* Questions */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          <BookOpen size={15} />
-          Questions &amp; Réponses
-        </div>
-
-        {QUESTIONS.map((q, idx) => (
-          <motion.div
-            key={q.num}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.06 }}
-            className="rounded-xl border border-border overflow-hidden"
-          >
-            {/* Question header */}
-            <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-start gap-3">
-              <span className="shrink-0 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
-                {q.num}
-              </span>
-              <span className="text-sm font-medium text-foreground">{q.question}</span>
-            </div>
-
-            {/* Answer */}
-            <div className="px-4 py-3 bg-background">
-              {q.num === 3 ? (
-                <div className="space-y-2 text-sm">
-                  <p className="text-muted-foreground">
-                    Calcul analytique :
-                  </p>
-                  <div className="font-mono text-xs bg-muted/30 rounded-lg p-3 space-y-1 text-foreground">
-                    <p>E = ∫₋₁⁰ (t+1)² dt  +  ∫₀¹ (1−t)² dt</p>
-                    <p>  = [<sup>(t+1)³</sup>/<sub>3</sub>]₋₁⁰  +  [−<sup>(1−t)³</sup>/<sub>3</sub>]₀¹</p>
-                    <p>  = 1/3  +  1/3  = <strong>2/3 ≈ {energyAnalytic.toFixed(4)}</strong></p>
-                  </div>
-                  <div className="flex gap-4 mt-2 text-xs">
-                    <span className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-primary font-mono font-semibold">
-                      E analytique = {energyAnalytic.toFixed(6)}
-                    </span>
-                    <span className="px-3 py-1.5 rounded-lg bg-muted border border-border text-muted-foreground font-mono">
-                      E numérique ≈ {energyNumeric.toFixed(6)}
-                    </span>
-                  </div>
-                </div>
-              ) : (
-                <pre className="text-sm text-muted-foreground whitespace-pre-wrap font-sans leading-relaxed">
-                  {q.answer}
-                </pre>
-              )}
-            </div>
-          </motion.div>
-        ))}
+      {/* Verification note */}
+      <div className="p-4 rounded-xl bg-muted/30 border border-border/50 text-sm text-muted-foreground leading-relaxed">
+        <span className="font-semibold text-foreground">💡 Principe : </span>
+        Toute fonction définie par morceaux peut s'exprimer à l'aide de rampes <span className="font-mono text-foreground">R(t) = t·u(t)</span> et
+        d'échelons <span className="font-mono text-foreground">u(t)</span>. La courbe en tirets rouges doit se superposer exactement
+        au signal bleu, confirmant l'équivalence analytique.
       </div>
     </div>
   );
