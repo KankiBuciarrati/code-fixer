@@ -4,6 +4,7 @@ import { CustomSignalView } from '@/components/dsp/CustomSignalView';
 import { SignalDecompositionView } from '@/components/dsp/SignalDecompositionView';
 import { SignalDerivativesView } from '@/components/dsp/SignalDerivativesView';
 import { SignalParityView } from '@/components/dsp/SignalParityView';
+import { SignalExo6View } from '@/components/dsp/SignalExo6View';
 
 export const TP_SECTIONS: TPSection[] = [
   {
