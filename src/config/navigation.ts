@@ -4,6 +4,7 @@ import { CustomSignalView } from '@/components/dsp/CustomSignalView';
 import { SignalDecompositionView } from '@/components/dsp/SignalDecompositionView';
 import { SignalDerivativesView } from '@/components/dsp/SignalDerivativesView';
 import { SignalParityView } from '@/components/dsp/SignalParityView';
+import { SignalExo6View } from '@/components/dsp/SignalExo6View';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -46,6 +47,13 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Parties Paire et Impaire',
         description: 'Décomposer des signaux en parties paire et impaire',
         component: SignalParityView,
+      },
+      {
+        id: 'tp1-exo6',
+        number: 6,
+        title: 'Analyse du signal y(t)',
+        description: 'Classification, expression analytique, énergie et périodisation',
+        component: SignalExo6View,
       },
     ],
   },
