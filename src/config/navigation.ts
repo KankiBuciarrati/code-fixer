@@ -48,6 +48,13 @@ export const TP_SECTIONS: TPSection[] = [
         description: 'Décomposer des signaux en parties paire et impaire',
         component: SignalParityView,
       },
+      {
+        id: 'tp1-exo6',
+        number: 6,
+        title: 'Analyse du signal y(t)',
+        description: 'Classification, expression analytique, énergie et périodisation',
+        component: SignalExo6View,
+      },
     ],
   },
 ];
