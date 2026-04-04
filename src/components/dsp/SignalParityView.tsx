@@ -74,129 +74,129 @@ export const SignalParityView: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Theory card */}
-      <div className="p-5 rounded-xl bg-primary/5 border border-primary/15 space-y-2">
-        <div className="flex items-center gap-2 font-semibold text-foreground">
-          <FlipHorizontal className="text-primary" size={18} />
-          Décomposition Paire / Impaire
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 text-sm font-mono">
-          <div className="p-3 rounded-lg bg-background border border-border">
-            <span className="text-xs font-semibold text-muted-foreground block mb-1 uppercase tracking-wider">Partie paire</span>
-            <span className="text-foreground">xₑ(t) = [x(t) + x(−t)] / 2</span>
+      <div className="space-y-6">
+        {/* Theory card */}
+        <div className="p-5 rounded-xl bg-primary/5 border border-primary/15 space-y-2">
+          <div className="flex items-center gap-2 font-semibold text-foreground">
+            <FlipHorizontal className="text-primary" size={18} />
+            Décomposition Paire / Impaire
           </div>
-          <div className="p-3 rounded-lg bg-background border border-border">
-            <span className="text-xs font-semibold text-muted-foreground block mb-1 uppercase tracking-wider">Partie impaire</span>
-            <span className="text-foreground">xₒ(t) = [x(t) − x(−t)] / 2</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 text-sm font-mono">
+            <div className="p-3 rounded-lg bg-background border border-border">
+              <span className="text-xs font-semibold text-muted-foreground block mb-1 uppercase tracking-wider">Partie paire</span>
+              <span className="text-foreground">xₑ(t) = [x(t) + x(−t)] / 2</span>
+            </div>
+            <div className="p-3 rounded-lg bg-background border border-border">
+              <span className="text-xs font-semibold text-muted-foreground block mb-1 uppercase tracking-wider">Partie impaire</span>
+              <span className="text-foreground">xₒ(t) = [x(t) − x(−t)] / 2</span>
+            </div>
           </div>
+          <p className="text-xs text-muted-foreground">Propriété : x(t) = xₑ(t) + xₒ(t)</p>
         </div>
-        <p className="text-xs text-muted-foreground">Propriété : x(t) = xₑ(t) + xₒ(t)</p>
-      </div>
 
-      {/* Signal selector */}
-      <div className="flex flex-col gap-2">
-        <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Signal</span>
-        {PARITY_SIGNALS.map((s, i) => (
-          <button
-            key={s.id}
-            onClick={() => handleSelectSignal(i)}
-            className={`px-4 py-2.5 rounded-lg text-sm font-medium text-left transition-all border ${
-              selectedSignal === i
-                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80 border-transparent'
-            }`}
-          >
-            <span className="font-semibold mr-2">{i + 1})</span>
-            <span className="font-mono">{s.latex}</span>
-          </button>
-        ))}
-      </div>
+        {/* Signal selector */}
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Signal</span>
+          {PARITY_SIGNALS.map((s, i) => (
+              <button
+                  key={s.id}
+                  onClick={() => handleSelectSignal(i)}
+                  className={`px-4 py-2.5 rounded-lg text-sm font-medium text-left transition-all border ${
+                      selectedSignal === i
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                          : 'bg-muted text-muted-foreground hover:bg-muted/80 border-transparent'
+                  }`}
+              >
+                <span className="font-semibold mr-2">{i + 1})</span>
+                <span className="font-mono">{s.latex}</span>
+              </button>
+          ))}
+        </div>
 
-      {/* Time range slider */}
-      <div className="flex items-center gap-4">
+        {/* Time range slider */}
+        <div className="flex items-center gap-4">
         <span className="text-sm font-semibold text-muted-foreground uppercase tracking-wider shrink-0">
           Fenêtre : [−{tRange}, {tRange}]
         </span>
-        <input
-          type="range"
-          min={0.5}
-          max={signal.maxRange}
-          step={0.5}
-          value={tRange}
-          onChange={(e) => setTRange(Number(e.target.value))}
-          className="flex-1 accent-primary"
-        />
-      </div>
+          <input
+              type="range"
+              min={0.5}
+              max={signal.maxRange}
+              step={0.5}
+              value={tRange}
+              onChange={(e) => setTRange(Number(e.target.value))}
+              className="flex-1 accent-primary"
+          />
+        </div>
 
-      {/* Charts */}
-      <div className="space-y-5">
-        {charts.map((chart, idx) => (
-          <motion.div
-            key={chart.key}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.08 }}
-            className="rounded-xl border border-border overflow-hidden"
-          >
-            <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full" style={{ background: chart.color }} />
-              <span className="text-sm font-semibold text-foreground">{chart.label}</span>
-            </div>
-            <div className="p-4 bg-background">
-              <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis
-                    dataKey="t"
-                    type="number"
-                    domain={[-tRange, tRange]}
-                    tickFormatter={(v) => v.toFixed(1)}
-                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                    label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
-                  />
-                  <YAxis
-                    domain={['auto', 'auto']}
-                    tickFormatter={(v) => Number(v).toFixed(2)}
-                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                    width={55}
-                  />
-                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
-                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
-                  <Tooltip
-                    contentStyle={{
-                      background: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                    }}
-                    formatter={(v: number) => [v.toFixed(4), chart.label]}
-                    labelFormatter={(l: number) => `t = ${Number(l).toFixed(3)}`}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey={chart.key}
-                    stroke={chart.color}
-                    strokeWidth={2}
-                    dot={false}
-                    isAnimationActive={false}
-                    connectNulls={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+        {/* Charts */}
+        <div className="space-y-5">
+          {charts.map((chart, idx) => (
+              <motion.div
+                  key={chart.key}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: idx * 0.08 }}
+                  className="rounded-xl border border-border overflow-hidden"
+              >
+                <div className="px-4 py-3 bg-muted/40 border-b border-border flex items-center gap-2">
+                  <span className="inline-block w-3 h-3 rounded-full" style={{ background: chart.color }} />
+                  <span className="text-sm font-semibold text-foreground">{chart.label}</span>
+                </div>
+                <div className="p-4 bg-background">
+                  <ResponsiveContainer width="100%" height={380}>
+                    <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                      <XAxis
+                          dataKey="t"
+                          type="number"
+                          domain={[-tRange, tRange]}
+                          tickFormatter={(v) => v.toFixed(1)}
+                          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                          label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }}
+                      />
+                      <YAxis
+                          domain={['auto', 'auto']}
+                          tickFormatter={(v) => Number(v).toFixed(2)}
+                          tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                          width={55}
+                      />
+                      <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
+                      <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
+                      <Tooltip
+                          contentStyle={{
+                            background: 'hsl(var(--card))',
+                            border: '1px solid hsl(var(--border))',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                          }}
+                          formatter={(v: number) => [v.toFixed(4), chart.label]}
+                          labelFormatter={(l: number) => `t = ${Number(l).toFixed(3)}`}
+                      />
+                      <Line
+                          type="monotone"
+                          dataKey={chart.key}
+                          stroke={chart.color}
+                          strokeWidth={2}
+                          dot={false}
+                          isAnimationActive={false}
+                          connectNulls={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </motion.div>
+          ))}
+        </div>
 
-      {/* Verification */}
-      <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Vérification</p>
-        <p className="text-sm text-muted-foreground">
-          x(t) = xₑ(t) + xₒ(t) — La partie paire est symétrique par rapport à l'axe des ordonnées,
-          et la partie impaire est antisymétrique (xₒ(−t) = −xₒ(t)).
-        </p>
+        {/* Verification */}
+        <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Vérification</p>
+          <p className="text-sm text-muted-foreground">
+            x(t) = xₑ(t) + xₒ(t) — La partie paire est symétrique par rapport à l'axe des ordonnées,
+            et la partie impaire est antisymétrique (xₒ(−t) = −xₒ(t)).
+          </p>
+        </div>
       </div>
-    </div>
   );
 };
