@@ -6,6 +6,7 @@ import { SignalDerivativesView } from '@/components/dsp/SignalDerivativesView';
 import { SignalParityView } from '@/components/dsp/SignalParityView';
 import { SignalExo6View } from '@/components/dsp/SignalExo6View';
 import { SawtoothFourierView } from '@/components/dsp/tp2/SawtoothFourierView';
+import { FourierTransformView } from '@/components/dsp/tp2/FourierTransformView';
 
 export const TP_SECTIONS: TPSection[] = [
   {
