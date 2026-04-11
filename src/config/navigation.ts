@@ -6,6 +6,7 @@ import { SignalDerivativesView } from '@/components/dsp/SignalDerivativesView';
 import { SignalParityView } from '@/components/dsp/SignalParityView';
 import { SignalExo6View } from '@/components/dsp/SignalExo6View';
 import { SawtoothFourierView } from '@/components/dsp/tp2/SawtoothFourierView';
+import { FourierTransformView } from '@/components/dsp/tp2/FourierTransformView';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -70,6 +71,13 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Dent de Scie – Fourier',
         description: 'Série de Fourier, spectres, formes trigo/harmonique et puissance',
         component: SawtoothFourierView,
+      },
+      {
+        id: 'tp2-exo2',
+        number: 2,
+        title: 'Transformée de Fourier – Propriétés',
+        description: 'TF des signaux via propriétés, spectres d\'amplitude et de phase',
+        component: FourierTransformView,
       },
     ],
   },
