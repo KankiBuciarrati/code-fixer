@@ -5,6 +5,7 @@ import { SignalDecompositionView } from '@/components/dsp/SignalDecompositionVie
 import { SignalDerivativesView } from '@/components/dsp/SignalDerivativesView';
 import { SignalParityView } from '@/components/dsp/SignalParityView';
 import { SignalExo6View } from '@/components/dsp/SignalExo6View';
+import { SawtoothFourierView } from '@/components/dsp/tp2/SawtoothFourierView';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -54,6 +55,21 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Analyse du signal y(t)',
         description: 'Classification, expression analytique, énergie et périodisation',
         component: SignalExo6View,
+      },
+    ],
+  },
+  {
+    id: 'tp2',
+    number: 2,
+    title: 'Séries de Fourier',
+    description: 'Décomposition en séries de Fourier et analyse spectrale',
+    exercises: [
+      {
+        id: 'tp2-exo1',
+        number: 1,
+        title: 'Dent de Scie – Fourier',
+        description: 'Série de Fourier, spectres, formes trigo/harmonique et puissance',
+        component: SawtoothFourierView,
       },
     ],
   },
