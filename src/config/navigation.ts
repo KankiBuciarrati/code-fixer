@@ -72,6 +72,13 @@ export const TP_SECTIONS: TPSection[] = [
         description: 'Série de Fourier, spectres, formes trigo/harmonique et puissance',
         component: SawtoothFourierView,
       },
+      {
+        id: 'tp2-exo2',
+        number: 2,
+        title: 'Transformée de Fourier – Propriétés',
+        description: 'TF des signaux via propriétés, spectres d\'amplitude et de phase',
+        component: FourierTransformView,
+      },
     ],
   },
 ];
