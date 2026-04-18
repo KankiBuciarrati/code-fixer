@@ -1,10 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine, Legend, ScatterChart, Scatter,
+  Tooltip, ResponsiveContainer, ReferenceLine, Legend,
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { Activity, TrendingDown, Zap, Waves, BookOpen } from 'lucide-react';
+import { Activity, TrendingDown, Zap, Waves, BookOpen, LucideIcon } from 'lucide-react';
 import { linspace } from '@/utils/signalAnalysis';
 
 // ─── Signal y(t) definition ──────────────────────────────────────────────────
@@ -28,7 +28,6 @@ const y = (t: number): number => {
 //        = −R(t+1) + R(t−1) + 2u(t) − u(t−1) − u(t+1)·0 ...
 // We display the gated form which is clearest.
 const u = (t: number): number => (t >= 0 ? 1 : 0);
-const R = (t: number): number => (t > 0 ? t : 0);
 
 const yDecomp = (t: number): number =>
   -(t + 1) * (u(t + 1) - u(t)) + (1 - t) * (u(t) - u(t - 1));
@@ -100,7 +99,7 @@ const computeFourier = (
 // ─── Component ───────────────────────────────────────────────────────────────
 type TabKey = 'signal' | 'decomp' | 'd1' | 'd2' | 'fourier';
 
-const TABS: { key: TabKey; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
+const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
   { key: 'signal',  label: 'Signal y(t)',          icon: Activity   },
   { key: 'decomp',  label: 'Décomposition R/u',    icon: BookOpen   },
   { key: 'd1',      label: '1ère dérivée',         icon: TrendingDown },
