@@ -1,132 +1,88 @@
 import React, { useState, useMemo } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine, Legend,
+  Tooltip, ResponsiveContainer, ReferenceLine, Legend, ReferenceDot,
 } from 'recharts';
 import { motion } from 'framer-motion';
-import { Activity, TrendingDown, Zap, Waves, BookOpen, LucideIcon } from 'lucide-react';
+import { Activity, GitBranch, TrendingUp, Waves } from 'lucide-react';
 import { linspace } from '@/utils/signalAnalysis';
 
-// ─── Signal y(t) definition ──────────────────────────────────────────────────
-// y(t) = -(t+1)  for t ∈ [-1, 0)
-// y(t) =  (1-t)  for t ∈ [0, 1]
-// y(t) = 0       elsewhere
-// Note: discontinuity (jump of +2) at t = 0
+// ─── Signal definition ───────────────────────────────────────────────
+// y(t) = -(t+1) on [-1, 0)   →  y(0⁻) = -1
+// y(t) =  1-t   on [0, 1]    →  y(0⁺) = +1   (jump = +2)
 const y = (t: number): number => {
   if (t >= -1 && t < 0) return -(t + 1);
   if (t >= 0 && t <= 1) return 1 - t;
   return 0;
 };
 
-// ─── Ramp / Step decomposition ───────────────────────────────────────────────
-// y(t) = -(t+1)·[u(t+1) - u(t)] + (1-t)·[u(t) - u(t-1)]
-//      = -R(t+1) + R(t) + (something for jump) ...
-// Cleanest expression:
-//   y(t) = -(t+1)[u(t+1)−u(t)] + (1−t)[u(t)−u(t−1)]
-// Equivalent expanded form using R and u:
-//   y(t) = −R(t+1) + R(t) + 2·u(t) − R(t) + R(t−1) − u(t−1)
-//        = −R(t+1) + R(t−1) + 2u(t) − u(t−1) − u(t+1)·0 ...
-// We display the gated form which is clearest.
-const u = (t: number): number => (t >= 0 ? 1 : 0);
+const u = (t: number) => (t >= 0 ? 1 : 0);
 
-const yDecomp = (t: number): number =>
-  -(t + 1) * (u(t + 1) - u(t)) + (1 - t) * (u(t) - u(t - 1));
+// y(t) reconstructed from windowed pieces (R/u decomposition)
+const block1 = (t: number) => -(t + 1) * (u(t + 1) - u(t));   // -(t+1) on [-1, 0)
+const block2 = (t: number) => (1 - t) * (u(t) - u(t - 1));    //  1-t   on [0, 1]
+const yDecomp = (t: number) => block1(t) + block2(t);
 
-// ─── Analytical first derivative ─────────────────────────────────────────────
-// y'(t) = -1  for t ∈ ]-1, 0[ ∪ ]0, 1[
-//       = 0   elsewhere (continuous part)
-//       + 2·δ(t)   (Dirac from the +2 jump at t=0)
+// ─── Derivatives ─────────────────────────────────────────────────────
+// y'(t) = -1 on (-1, 0) ∪ (0, 1)  +  2δ(t)
 const yPrime = (t: number): number => {
   if (t > -1 && t < 0) return -1;
-  if (t > 0  && t < 1) return -1;
+  if (t > 0 && t < 1) return -1;
   return 0;
 };
+// y''(t) = -δ(t+1) + δ(t-1) + 2δ'(t)  (no continuous part)
 
-// Note on derivatives:
-// y'(t) = -1·[u(t+1) - u(t-1)] + 2·δ(t)
-//        = -1 on ]-1, 1[ continuous part, plus a Dirac of weight +2 at t=0
-// y''(t) = -δ(t+1) + δ(t-1) + 2·δ'(t)
-//        = continuous part is zero everywhere
-//        Diracs at t=±1 (jumps of y') + doublet at t=0 (derivative of Dirac)
-
-// ─── Fourier Transform (numerical) ───────────────────────────────────────────
-// Y(f) computed analytically:
-// y(t) = -(t+1)·gate[-1,0] + (1-t)·gate[0,1]
-// Using rectangular pulses centered & ramps; closed form:
-// Y(f) = ∫_{-1}^{0} -(t+1) e^{-j2πft} dt + ∫_{0}^{1} (1-t) e^{-j2πft} dt
-// We compute it numerically via Simpson rule for robustness.
-const computeFourier = (
-  fValues: number[],
-  tMin: number,
-  tMax: number,
-  N: number,
-): { f: number; re: number; im: number; mag: number; phase: number }[] => {
-  const dt = (tMax - tMin) / N;
-  const tArr = Array.from({ length: N + 1 }, (_, i) => tMin + i * dt);
-  const yArr = tArr.map(y);
-
-  return fValues.map((f) => {
-    let re = 0;
-    let im = 0;
-    for (let i = 0; i < N; i++) {
-      // Trapezoidal rule
-      const t1 = tArr[i];
-      const t2 = tArr[i + 1];
-      const y1 = yArr[i];
-      const y2 = yArr[i + 1];
-      const w1 = 2 * Math.PI * f * t1;
-      const w2 = 2 * Math.PI * f * t2;
-      re += 0.5 * dt * (y1 * Math.cos(w1) + y2 * Math.cos(w2));
-      im += -0.5 * dt * (y1 * Math.sin(w1) + y2 * Math.sin(w2));
-    }
-    const mag = Math.sqrt(re * re + im * im);
-    const phase = Math.atan2(im, re);
-    return { f, re, im, mag, phase };
-  });
+// ─── Fourier Transform (analytical via y'') ──────────────────────────
+// Y''(f) = -e^{+j2πf} + e^{-j2πf} + 2·(j2πf) = -2j·sin(2πf) + j4πf
+// Y(f)   = Y''(f) / (j2πf)² = j·[2·sin(2πf) - 4πf] / (4π²f²)   → purely imaginary
+const Yimag = (f: number): number => {
+  if (Math.abs(f) < 1e-6) return 0; // limit at f→0
+  return (2 * Math.sin(2 * Math.PI * f) - 4 * Math.PI * f) / (4 * Math.PI * Math.PI * f * f);
+};
+const Ymag = (f: number) => Math.abs(Yimag(f));
+const Yphase = (f: number) => {
+  const im = Yimag(f);
+  if (Math.abs(im) < 1e-9) return 0;
+  return im > 0 ? Math.PI / 2 : -Math.PI / 2;
 };
 
-// ─── Component ───────────────────────────────────────────────────────────────
-type TabKey = 'signal' | 'decomp' | 'd1' | 'd2' | 'fourier';
-
-const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
-  { key: 'signal',  label: 'Signal y(t)',          icon: Activity   },
-  { key: 'decomp',  label: 'Décomposition R/u',    icon: BookOpen   },
-  { key: 'd1',      label: '1ère dérivée',         icon: TrendingDown },
-  { key: 'd2',      label: '2ème dérivée',         icon: Zap        },
-  { key: 'fourier', label: 'Transformée Fourier',  icon: Waves      },
-];
+// ─── Component ───────────────────────────────────────────────────────
+type Tab = 'signal' | 'decomp' | 'deriv' | 'fourier';
 
 export const SignalYAnalysisView: React.FC = () => {
-  const [tab, setTab] = useState<TabKey>('signal');
+  const [tab, setTab] = useState<Tab>('signal');
 
-  // ── Signal samples ──
-  const signalData = useMemo(() => {
-    const t = linspace(-3, 3, 1500);
-    return t.map((ti) => ({
-      t: parseFloat(ti.toFixed(4)),
-      original: y(ti),
-      decomp: yDecomp(ti),
+  const tData = useMemo(() => {
+    const ts = linspace(-3, 3, 1500);
+    return ts.map(t => ({
+      t: parseFloat(t.toFixed(4)),
+      y: y(t),
+      decomp: yDecomp(t),
+      b1: block1(t),
+      b2: block2(t),
+      yp: yPrime(t),
     }));
   }, []);
 
-  // ── First derivative (analytical, continuous part only) ──
-  const d1Data = useMemo(() => {
-    const t = linspace(-3, 3, 1500);
-    return t.map((ti) => ({
-      t: parseFloat(ti.toFixed(4)),
-      v: yPrime(ti),
+  const fData = useMemo(() => {
+    const fs = linspace(-5, 5, 1500);
+    return fs.map(f => ({
+      f: parseFloat(f.toFixed(4)),
+      mag: Ymag(f),
+      phase: Yphase(f) / Math.PI,
+      im: Yimag(f),
     }));
   }, []);
 
-  // ── Fourier Transform ──
-  const fourierData = useMemo(() => {
-    const fValues = linspace(-5, 5, 600);
-    return computeFourier(fValues, -1.5, 1.5, 2000);
-  }, []);
+  const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
+    { id: 'signal',  label: 'Signal y(t)',        icon: Activity },
+    { id: 'decomp',  label: 'Décomposition R/u',  icon: GitBranch },
+    { id: 'deriv',   label: 'Dérivées y′, y″',    icon: TrendingUp },
+    { id: 'fourier', label: 'Transformée Y(f)',   icon: Waves },
+  ];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="p-5 rounded-xl bg-primary/5 border border-primary/15 flex items-start gap-3">
         <Activity className="text-primary mt-0.5 shrink-0" size={20} />
         <div>
@@ -134,250 +90,281 @@ export const SignalYAnalysisView: React.FC = () => {
             Exercice 3 — Analyse complète du signal y(t)
           </p>
           <p className="text-sm text-muted-foreground mt-1">
-            Décomposition en rampe / échelon, dérivées (1ère et 2ème) et transformée de Fourier
-            d'un signal triangulaire discontinu en t = 0.
+            Triangle discontinu : <span className="font-mono">y(t) = −(t+1)</span> sur [−1, 0[ et <span className="font-mono">y(t) = 1−t</span> sur [0, 1], avec un saut de <span className="font-mono">+2</span> en <span className="font-mono">t = 0</span>.
           </p>
         </div>
       </div>
 
-      {/* Definition card */}
-      <div className="p-4 rounded-xl bg-card border border-border">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-          Définition analytique
-        </p>
-        <div className="font-mono text-sm space-y-1 text-foreground">
-          <p>y(t) = −(t + 1)  pour t ∈ [−1, 0[</p>
-          <p>y(t) =  (1 − t)   pour t ∈ [0, 1]</p>
-          <p>y(t) =  0          ailleurs</p>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          ⚠️ Discontinuité (saut de +2) en t = 0 : y(0⁻) = −1, y(0⁺) = +1.
-        </p>
-      </div>
-
-      {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-border">
-        {TABS.map(({ key, label, icon: Icon }) => (
+        {tabs.map(({ id, label, icon: Icon }) => (
           <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`px-3 py-2 text-sm font-medium rounded-t-lg flex items-center gap-2 transition-all ${
-              tab === key
-                ? 'bg-primary text-primary-foreground'
-                : 'text-muted-foreground hover:bg-muted/50'
+            key={id}
+            onClick={() => setTab(id)}
+            className={`px-4 py-2.5 text-sm font-medium rounded-t-lg transition-all flex items-center gap-2 border-b-2 ${
+              tab === id
+                ? 'text-primary border-primary bg-primary/5'
+                : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50'
             }`}
           >
-            <Icon size={14} />
-            {label}
+            <Icon size={15} /> {label}
           </button>
         ))}
       </div>
 
-      {/* Tab content */}
-      <motion.div
-        key={tab}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-xl border border-border overflow-hidden"
-      >
-        {tab === 'signal' && (
-          <ChartFrame title="Tracé du signal y(t)" subtitle="Représentation graphique originale">
-            <ResponsiveContainer width="100%" height={380}>
-              <LineChart data={signalData} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                <XAxis
-                  dataKey="t"
-                  type="number"
-                  domain={[-3, 3]}
-                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                  tickFormatter={(v) => v.toFixed(0)}
-                  label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }}
-                />
-                <YAxis
-                  domain={[-1.2, 1.2]}
-                  tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                  width={45}
-                />
-                <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
-                <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
-                <Tooltip
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
-                  labelFormatter={(l) => `t = ${Number(l).toFixed(3)}`}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
-                <Line type="linear" dataKey="original" name="y(t)" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        )}
-
-        {tab === 'decomp' && (
-          <>
-            <ChartFrame
-              title="Décomposition en rampe et échelon"
-              subtitle="Vérification graphique : les deux courbes doivent se superposer."
-            >
-              <ResponsiveContainer width="100%" height={360}>
-                <LineChart data={signalData} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis dataKey="t" type="number" domain={[-3, 3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis domain={[-1.2, 1.2]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
-                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
-                  <Legend wrapperStyle={{ fontSize: '12px' }} />
-                  <Line type="linear" dataKey="original" name="y(t) original" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} isAnimationActive={false} />
-                  <Line type="linear" dataKey="decomp" name="Décomposition R/u" stroke="#f43f5e" strokeWidth={2} strokeDasharray="6 3" dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartFrame>
-            <div className="p-4 bg-muted/30 border-t border-border">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                Expression en fonctions porte (gates) :
-              </p>
-              <p className="font-mono text-sm text-foreground">
-                y(t) = −(t+1)·[u(t+1) − u(t)] + (1−t)·[u(t) − u(t−1)]
-              </p>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-3 mb-2">
-                Forme développée (rampes + échelons) :
-              </p>
-              <p className="font-mono text-sm text-foreground">
-                y(t) = −R(t+1) + R(t) + 2·u(t) + R(t) − R(t−1) − u(t−1) − ... 
-              </p>
-              <p className="text-xs text-muted-foreground mt-2">
-                Le saut de +2 en t = 0 est généré par le terme 2·u(t).
-              </p>
-            </div>
-          </>
-        )}
-
-        {tab === 'd1' && (
-          <>
-            <ChartFrame
-              title="Première dérivée  y′(t)"
-              subtitle="Tracé analytique exact. La flèche rouge représente l'impulsion de Dirac."
-            >
-              <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={d1Data} margin={{ top: 30, right: 30, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis dataKey="t" type="number" domain={[-3, 3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => v.toFixed(0)} label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }} />
-                  <YAxis domain={[-2.5, 2.5]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
-                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
-                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
-                  <ReferenceLine x={0} stroke="#f43f5e" strokeWidth={3} label={{ value: '+2·δ(t)', fill: '#f43f5e', fontSize: 13, position: 'top', fontWeight: 'bold' }} segment={[{ x: 0, y: 0 }, { x: 0, y: 2 }]} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} labelFormatter={(l) => `t = ${Number(l).toFixed(3)}`} />
-                  <Line type="linear" dataKey="v" name="y'(t) (partie continue)" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartFrame>
-            <div className="p-4 bg-muted/30 border-t border-border space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expression analytique</p>
-              <p className="font-mono text-sm text-foreground">y′(t) = −[u(t+1) − u(t−1)] + 2·δ(t)</p>
-              <p className="text-xs text-muted-foreground">
-                <span className="font-semibold text-foreground">Partie continue :</span> y′(t) = −1 sur ]−1, 1[, et 0 ailleurs (les deux morceaux ont une pente de −1).
-                <br />
-                <span className="font-semibold text-foreground">Partie singulière :</span> le saut de +2 en t = 0 (de −1 vers +1) génère l'impulsion <span className="font-mono">2·δ(t)</span>.
-              </p>
-            </div>
-          </>
-        )}
-
-        {tab === 'd2' && (
-          <>
-            <ChartFrame
-              title="Seconde dérivée  y″(t)"
-              subtitle="La partie continue est nulle. y″(t) est une somme de Diracs et d'un doublet."
-            >
-              <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={[{ t: -3, v: 0 }, { t: 3, v: 0 }]} margin={{ top: 40, right: 30, left: 10, bottom: 30 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis dataKey="t" type="number" domain={[-3, 3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => v.toFixed(0)} label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }} />
-                  <YAxis domain={[-2, 2]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
-                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.6} strokeWidth={1.5} />
-                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
-                  <ReferenceLine x={-1} stroke="#f43f5e" strokeWidth={3} segment={[{ x: -1, y: 0 }, { x: -1, y: -1 }]} label={{ value: '−δ(t+1)', fill: '#f43f5e', fontSize: 12, position: 'insideBottomLeft', fontWeight: 'bold' }} />
-                  <ReferenceLine x={1} stroke="#f43f5e" strokeWidth={3} segment={[{ x: 1, y: 0 }, { x: 1, y: 1 }]} label={{ value: '+δ(t−1)', fill: '#f43f5e', fontSize: 12, position: 'top', fontWeight: 'bold' }} />
-                  <ReferenceLine x={-0.05} stroke="#8b5cf6" strokeWidth={3} segment={[{ x: -0.05, y: 0 }, { x: -0.05, y: 1.6 }]} />
-                  <ReferenceLine x={0.05} stroke="#8b5cf6" strokeWidth={3} segment={[{ x: 0.05, y: 0 }, { x: 0.05, y: -1.6 }]} label={{ value: '2·δ′(t)', fill: '#8b5cf6', fontSize: 12, position: 'insideBottomRight', fontWeight: 'bold' }} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
-                  <Line type="linear" dataKey="v" name="y''(t) (partie continue = 0)" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartFrame>
-            <div className="p-4 bg-muted/30 border-t border-border space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expression analytique</p>
-              <p className="font-mono text-sm text-foreground">y″(t) = −δ(t+1) + δ(t−1) + 2·δ′(t)</p>
-              <ul className="text-xs text-muted-foreground space-y-1 mt-2 list-disc list-inside">
-                <li><span className="font-mono text-foreground">−δ(t+1)</span> en t = −1 : saut de y′ de 0 → −1</li>
-                <li><span className="font-mono text-foreground">+δ(t−1)</span> en t = +1 : saut de y′ de −1 → 0</li>
-                <li><span className="font-mono text-foreground">2·δ′(t)</span> en t = 0 : doublet (dérivée du Dirac 2·δ provenant du saut de y)</li>
-              </ul>
-            </div>
-          </>
-        )}
-
-        {tab === 'fourier' && (
-          <>
-            <ChartFrame title="Spectre d'amplitude  |Y(f)|" subtitle="Calcul numérique par intégration trapézoïdale.">
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={fourierData} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis dataKey="f" type="number" domain={[-5, 5]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} label={{ value: 'f (Hz)', position: 'insideBottom', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={50} />
-                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} labelFormatter={(l) => `f = ${Number(l).toFixed(3)} Hz`} />
-                  <Line type="monotone" dataKey="mag" name="|Y(f)|" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartFrame>
-
-            <div className="border-t border-border">
-              <ChartFrame title="Spectre de phase  arg(Y(f))" subtitle="En radians.">
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={fourierData} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                    <XAxis dataKey="f" type="number" domain={[-5, 5]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} label={{ value: 'f (Hz)', position: 'insideBottom', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                    <YAxis domain={[-Math.PI, Math.PI]} tickFormatter={(v) => v.toFixed(1)} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={50} />
-                    <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                    <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                    <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
-                    <Line type="linear" dataKey="phase" name="arg(Y(f))" stroke="#f43f5e" strokeWidth={1.5} dot={false} isAnimationActive={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </ChartFrame>
-            </div>
-
-            <div className="p-4 bg-muted/30 border-t border-border space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Expression analytique (par intégration directe)
-              </p>
-              <p className="font-mono text-sm text-foreground break-all">
-                Y(f) = ∫₋₁⁰ −(t+1)·e^(−j2πft) dt + ∫₀¹ (1−t)·e^(−j2πft) dt
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Comme y(t) est <span className="font-semibold">impair</span>, Y(f) est purement imaginaire,
-                donc |Y(f)| est paire et arg(Y(f)) = ±π/2 (modulo le signe).
-              </p>
-            </div>
-          </>
-        )}
+      <motion.div key={tab} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+        {tab === 'signal'  && <SignalTab data={tData} />}
+        {tab === 'decomp'  && <DecompTab data={tData} />}
+        {tab === 'deriv'   && <DerivTab  data={tData} />}
+        {tab === 'fourier' && <FourierTab data={fData} />}
       </motion.div>
     </div>
   );
 };
 
-// ─── Helper: chart frame ─────────────────────────────────────────────────────
-const ChartFrame: React.FC<{
-  title: string;
-  subtitle?: string;
-  children: React.ReactNode;
-}> = ({ title, subtitle, children }) => (
-  <>
+// ─── Tab: Signal y(t) ─────────────────────────────────────────────────
+const SignalTab: React.FC<{ data: any[] }> = ({ data }) => (
+  <div className="space-y-4">
+    <FormulaBox title="Définition par morceaux">
+      <div className="font-mono text-sm space-y-1">
+        <div>y(t) = <span className="text-primary">−(t + 1)</span> &nbsp; pour &nbsp; t ∈ [−1, 0[</div>
+        <div>y(t) = <span className="text-primary">1 − t</span> &nbsp;&nbsp;&nbsp;&nbsp; pour &nbsp; t ∈ [0, 1]</div>
+        <div>y(t) = <span className="text-muted-foreground">0</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ailleurs</div>
+        <div className="pt-2 text-xs text-muted-foreground">
+          Discontinuité (saut de <span className="font-mono">+2</span>) en <span className="font-mono">t = 0</span> : y(0⁻) = −1, y(0⁺) = +1.
+        </div>
+      </div>
+    </FormulaBox>
+
+    <ChartCard title="Tracé du signal y(t)">
+      <ResponsiveContainer width="100%" height={380}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <XAxis dataKey="t" type="number" domain={[-3, 3]} tickFormatter={v => v.toFixed(0)}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+          <YAxis domain={[-1.3, 1.3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
+          <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <Tooltip
+            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelFormatter={l => `t = ${Number(l).toFixed(3)}`}
+            formatter={(v: number) => v.toFixed(3)}
+          />
+          <Line type="linear" dataKey="y" name="y(t)" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+          <ReferenceDot x={0} y={-1} r={4} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />
+          <ReferenceDot x={0} y={1}  r={4} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  </div>
+);
+
+// ─── Tab: Décomposition R/u ──────────────────────────────────────────
+const DecompTab: React.FC<{ data: any[] }> = ({ data }) => (
+  <div className="space-y-4">
+    <FormulaBox title="Expression en fonction de R(t) et u(t)">
+      <div className="font-mono text-sm space-y-2">
+        <div className="text-muted-foreground text-xs">Avec les fenêtres rectangulaires <span className="font-mono">[u(t+1) − u(t)]</span> et <span className="font-mono">[u(t) − u(t−1)]</span> :</div>
+        <div>y(t) = <span className="text-amber-500">−(t+1)·[u(t+1) − u(t)]</span> + <span className="text-emerald-500">(1−t)·[u(t) − u(t−1)]</span></div>
+        <div className="pt-2 text-muted-foreground text-xs">Forme développée avec <span className="font-mono">R(t) = t·u(t)</span> :</div>
+        <div className="text-xs">y(t) = −R(t+1) + 2·R(t) − R(t−1) + 2·u(t) − u(t+1) − u(t−1)</div>
+      </div>
+    </FormulaBox>
+
+    <ChartCard title="Reconstruction par briques élémentaires">
+      <ResponsiveContainer width="100%" height={380}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <XAxis dataKey="t" type="number" domain={[-3, 3]} tickFormatter={v => v.toFixed(0)}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+          <YAxis domain={[-1.3, 1.3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
+          <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <Tooltip
+            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelFormatter={l => `t = ${Number(l).toFixed(3)}`}
+            formatter={(v: number) => v.toFixed(3)}
+          />
+          <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }} />
+          <Line type="linear" dataKey="b1" name="−(t+1)·[u(t+1)−u(t)]" stroke="#f59e0b" strokeWidth={1.8} dot={false} strokeDasharray="4 3" isAnimationActive={false} />
+          <Line type="linear" dataKey="b2" name="(1−t)·[u(t)−u(t−1)]"  stroke="#10b981" strokeWidth={1.8} dot={false} strokeDasharray="4 3" isAnimationActive={false} />
+          <Line type="linear" dataKey="decomp" name="Somme = y(t)"     stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  </div>
+);
+
+// ─── Tab: Dérivées ───────────────────────────────────────────────────
+const DerivTab: React.FC<{ data: any[] }> = ({ data }) => (
+  <div className="space-y-4">
+    <FormulaBox title="Première dérivée y′(t)">
+      <div className="font-mono text-sm space-y-1">
+        <div>y′(t) = <span className="text-rose-500">−1</span> sur ]−1, 0[ ∪ ]0, 1[ &nbsp; + &nbsp; <span className="text-primary">2·δ(t)</span></div>
+        <div className="text-xs text-muted-foreground pt-1">
+          Pente constante <span className="font-mono">−1</span> sur le support, plus une impulsion de Dirac de poids <span className="font-mono">+2</span> due au saut en t = 0.
+        </div>
+      </div>
+    </FormulaBox>
+
+    <ChartCard title="y′(t) — partie continue + Dirac">
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <XAxis dataKey="t" type="number" domain={[-3, 3]} tickFormatter={v => v.toFixed(0)}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+          <YAxis domain={[-1.5, 2.4]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
+          <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <Tooltip
+            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelFormatter={l => `t = ${Number(l).toFixed(3)}`}
+          />
+          <Line type="linear" dataKey="yp" name="y′(t) (partie continue)" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+          <ReferenceLine segment={[{ x: 0, y: 0 }, { x: 0, y: 2 }]} stroke="#f43f5e" strokeWidth={3} />
+          <ReferenceDot x={0} y={2} r={5} fill="#f43f5e" stroke="hsl(var(--background))" strokeWidth={2}
+            label={{ value: '+2δ(t)', position: 'top', fill: '#f43f5e', fontSize: 12, fontWeight: 600 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+
+    <FormulaBox title="Deuxième dérivée y″(t)">
+      <div className="font-mono text-sm space-y-1">
+        <div>y″(t) = <span className="text-rose-500">−δ(t+1)</span> + <span className="text-emerald-500">δ(t−1)</span> + <span className="text-primary">2·δ′(t)</span></div>
+        <div className="text-xs text-muted-foreground pt-1">
+          Les pentes constantes disparaissent ; subsistent les Dirac aux bords du support et le doublet <span className="font-mono">δ′(t)</span> issu de la dérivation du saut.
+        </div>
+      </div>
+    </FormulaBox>
+
+    <ChartCard title="y″(t) — Diracs et doublet">
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <XAxis dataKey="t" type="number" domain={[-3, 3]} tickFormatter={v => v.toFixed(0)}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+          <YAxis domain={[-2.4, 2.4]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
+          <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <Tooltip
+            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelFormatter={l => `t = ${Number(l).toFixed(3)}`}
+          />
+          <Line type="linear" dataKey={() => 0} name="y″(t) (continu = 0)" stroke="hsl(var(--muted-foreground))" strokeWidth={1} dot={false} isAnimationActive={false} />
+
+          {/* −δ(t+1) */}
+          <ReferenceLine segment={[{ x: -1, y: 0 }, { x: -1, y: -1 }]} stroke="#f43f5e" strokeWidth={3} />
+          <ReferenceDot x={-1} y={-1} r={5} fill="#f43f5e" stroke="hsl(var(--background))" strokeWidth={2}
+            label={{ value: '−δ(t+1)', position: 'bottom', fill: '#f43f5e', fontSize: 11, fontWeight: 600 }} />
+
+          {/* +δ(t-1) */}
+          <ReferenceLine segment={[{ x: 1, y: 0 }, { x: 1, y: 1 }]} stroke="#10b981" strokeWidth={3} />
+          <ReferenceDot x={1} y={1} r={5} fill="#10b981" stroke="hsl(var(--background))" strokeWidth={2}
+            label={{ value: '+δ(t−1)', position: 'top', fill: '#10b981', fontSize: 11, fontWeight: 600 }} />
+
+          {/* 2·δ'(t) doublet */}
+          <ReferenceLine segment={[{ x: -0.05, y: 0 }, { x: -0.05, y: 2 }]} stroke="hsl(var(--primary))" strokeWidth={3} />
+          <ReferenceDot x={-0.05} y={2} r={4} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2} />
+          <ReferenceLine segment={[{ x: 0.05, y: 0 }, { x: 0.05, y: -2 }]} stroke="hsl(var(--primary))" strokeWidth={3} />
+          <ReferenceDot x={0.05} y={-2} r={4} fill="hsl(var(--primary))" stroke="hsl(var(--background))" strokeWidth={2}
+            label={{ value: '2·δ′(t)', position: 'bottom', fill: 'hsl(var(--primary))', fontSize: 11, fontWeight: 600 }} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  </div>
+);
+
+// ─── Tab: Fourier ────────────────────────────────────────────────────
+const FourierTab: React.FC<{ data: any[] }> = ({ data }) => (
+  <div className="space-y-4">
+    <FormulaBox title="Calcul analytique via la dérivée seconde">
+      <div className="font-mono text-sm space-y-2">
+        <div className="text-xs text-muted-foreground">À partir de y″(t) = −δ(t+1) + δ(t−1) + 2·δ′(t) :</div>
+        <div>Y″(f) = −e^(+j2πf) + e^(−j2πf) + 2·(j2πf) = −2j·sin(2πf) + j4πf</div>
+        <div className="text-xs text-muted-foreground pt-1">Or Y″(f) = (j2πf)²·Y(f) = −4π²f²·Y(f), donc :</div>
+        <div className="text-primary">Y(f) = j · [2·sin(2πf) − 4πf] / (4π²f²)</div>
+        <div className="text-xs text-muted-foreground pt-1">
+          → Y(f) est <span className="font-semibold">imaginaire pur</span> ⇒ phase ∈ {`{ +π/2, −π/2 }`}.
+        </div>
+      </div>
+    </FormulaBox>
+
+    <ChartCard title="Spectre d'amplitude |Y(f)|">
+      <ResponsiveContainer width="100%" height={320}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <XAxis dataKey="f" type="number" domain={[-5, 5]} tickFormatter={v => v.toFixed(0)}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+            label={{ value: 'f (Hz)', position: 'insideRight', offset: -5, fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+          <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={50} tickFormatter={v => v.toFixed(2)} />
+          <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <Tooltip
+            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelFormatter={l => `f = ${Number(l).toFixed(3)} Hz`}
+            formatter={(v: number) => v.toFixed(4)}
+          />
+          <Line type="monotone" dataKey="mag" name="|Y(f)|" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+
+    <ChartCard title="Spectre de phase ∠Y(f) (en multiples de π)">
+      <ResponsiveContainer width="100%" height={260}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <XAxis dataKey="f" type="number" domain={[-5, 5]} tickFormatter={v => v.toFixed(0)}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+          <YAxis domain={[-0.7, 0.7]} ticks={[-0.5, 0, 0.5]}
+            tickFormatter={v => `${v}π`}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={50} />
+          <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <Tooltip
+            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelFormatter={l => `f = ${Number(l).toFixed(3)} Hz`}
+            formatter={(v: number) => `${v.toFixed(2)}π`}
+          />
+          <Line type="stepAfter" dataKey="phase" name="∠Y(f) / π" stroke="#f43f5e" strokeWidth={2} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+
+    <ChartCard title="Partie imaginaire Im{Y(f)} (la partie réelle est nulle)">
+      <ResponsiveContainer width="100%" height={260}>
+        <LineChart data={data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+          <XAxis dataKey="f" type="number" domain={[-5, 5]} tickFormatter={v => v.toFixed(0)}
+            tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+          <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={50} tickFormatter={v => v.toFixed(2)} />
+          <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
+          <Tooltip
+            contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+            labelFormatter={l => `f = ${Number(l).toFixed(3)} Hz`}
+            formatter={(v: number) => v.toFixed(4)}
+          />
+          <Line type="monotone" dataKey="im" name="Im{Y(f)}" stroke="#8b5cf6" strokeWidth={2} dot={false} isAnimationActive={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </ChartCard>
+  </div>
+);
+
+// ─── UI helpers ─────────────────────────────────────────────────────
+const FormulaBox: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div className="rounded-xl border border-border bg-muted/30 overflow-hidden">
+    <div className="px-4 py-2.5 bg-muted/60 border-b border-border">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
+    </div>
+    <div className="p-4">{children}</div>
+  </div>
+);
+
+const ChartCard: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+  <div className="rounded-xl border border-border overflow-hidden">
     <div className="px-4 py-3 bg-muted/40 border-b border-border">
       <p className="text-sm font-semibold text-foreground">{title}</p>
-      {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
     </div>
     <div className="p-4 bg-background">{children}</div>
-  </>
+  </div>
 );
