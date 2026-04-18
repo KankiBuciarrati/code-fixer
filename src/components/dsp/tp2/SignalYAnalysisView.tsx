@@ -264,35 +264,28 @@ export const SignalYAnalysisView: React.FC = () => {
           <>
             <ChartFrame
               title="Première dérivée  y′(t)"
-              subtitle="Calculée par différences finies. Le saut en t=0 produit une impulsion de Dirac 2·δ(t)."
+              subtitle="Tracé analytique exact. La flèche rouge représente l'impulsion de Dirac."
             >
               <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={d1Data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+                <LineChart data={d1Data} margin={{ top: 30, right: 30, left: 10, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis dataKey="t" type="number" domain={[-3, 3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
-                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  {d1Jumps.map((j, i) => (
-                    <ReferenceLine
-                      key={i}
-                      x={j.t}
-                      stroke="#f43f5e"
-                      strokeWidth={2.5}
-                      label={{ value: `${j.weight > 0 ? '+' : ''}${j.weight.toFixed(1)}δ`, fill: '#f43f5e', fontSize: 12, position: 'top' }}
-                    />
-                  ))}
-                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
-                  <Line type="linear" dataKey="v" name="y'(t)" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <XAxis dataKey="t" type="number" domain={[-3, 3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => v.toFixed(0)} label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }} />
+                  <YAxis domain={[-2.5, 2.5]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
+                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
+                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
+                  <ReferenceLine x={0} stroke="#f43f5e" strokeWidth={3} label={{ value: '+2·δ(t)', fill: '#f43f5e', fontSize: 13, position: 'top', fontWeight: 'bold' }} segment={[{ x: 0, y: 0 }, { x: 0, y: 2 }]} />
+                  <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} labelFormatter={(l) => `t = ${Number(l).toFixed(3)}`} />
+                  <Line type="linear" dataKey="v" name="y'(t) (partie continue)" stroke="hsl(var(--primary))" strokeWidth={2.5} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </ChartFrame>
-            <div className="p-4 bg-muted/30 border-t border-border">
-              <p className="font-mono text-sm text-foreground">
-                y′(t) = −[u(t+1) − u(t)] − [u(t) − u(t−1)] + 2·δ(t)
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Soit −1 sur ]−1, 1[ avec une impulsion de Dirac de poids +2 en t = 0.
+            <div className="p-4 bg-muted/30 border-t border-border space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expression analytique</p>
+              <p className="font-mono text-sm text-foreground">y′(t) = −[u(t+1) − u(t−1)] + 2·δ(t)</p>
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">Partie continue :</span> y′(t) = −1 sur ]−1, 1[, et 0 ailleurs (les deux morceaux ont une pente de −1).
+                <br />
+                <span className="font-semibold text-foreground">Partie singulière :</span> le saut de +2 en t = 0 (de −1 vers +1) génère l'impulsion <span className="font-mono">2·δ(t)</span>.
               </p>
             </div>
           </>
@@ -302,36 +295,32 @@ export const SignalYAnalysisView: React.FC = () => {
           <>
             <ChartFrame
               title="Seconde dérivée  y″(t)"
-              subtitle="Combinaison de Diracs aux discontinuités de y'(t)."
+              subtitle="La partie continue est nulle. y″(t) est une somme de Diracs et d'un doublet."
             >
               <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={d2Data} margin={{ top: 10, right: 30, left: 10, bottom: 20 }}>
+                <LineChart data={[{ t: -3, v: 0 }, { t: 3, v: 0 }]} margin={{ top: 40, right: 30, left: 10, bottom: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
-                  <XAxis dataKey="t" type="number" domain={[-3, 3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
-                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} />
-                  {d2Jumps.map((j, i) => (
-                    <ReferenceLine
-                      key={i}
-                      x={j.t}
-                      stroke="#f43f5e"
-                      strokeWidth={2.5}
-                      label={{ value: `${j.weight > 0 ? '+' : ''}${j.weight.toFixed(1)}δ`, fill: '#f43f5e', fontSize: 11, position: 'top' }}
-                    />
-                  ))}
+                  <XAxis dataKey="t" type="number" domain={[-3, 3]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} tickFormatter={(v) => v.toFixed(0)} label={{ value: 't', position: 'insideRight', offset: -5, fill: 'hsl(var(--muted-foreground))', fontSize: 13 }} />
+                  <YAxis domain={[-2, 2]} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={45} />
+                  <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeOpacity={0.6} strokeWidth={1.5} />
+                  <ReferenceLine x={0} stroke="hsl(var(--foreground))" strokeOpacity={0.4} strokeWidth={1.5} />
+                  <ReferenceLine x={-1} stroke="#f43f5e" strokeWidth={3} segment={[{ x: -1, y: 0 }, { x: -1, y: -1 }]} label={{ value: '−δ(t+1)', fill: '#f43f5e', fontSize: 12, position: 'insideBottomLeft', fontWeight: 'bold' }} />
+                  <ReferenceLine x={1} stroke="#f43f5e" strokeWidth={3} segment={[{ x: 1, y: 0 }, { x: 1, y: 1 }]} label={{ value: '+δ(t−1)', fill: '#f43f5e', fontSize: 12, position: 'top', fontWeight: 'bold' }} />
+                  <ReferenceLine x={-0.05} stroke="#8b5cf6" strokeWidth={3} segment={[{ x: -0.05, y: 0 }, { x: -0.05, y: 1.6 }]} />
+                  <ReferenceLine x={0.05} stroke="#8b5cf6" strokeWidth={3} segment={[{ x: 0.05, y: 0 }, { x: 0.05, y: -1.6 }]} label={{ value: '2·δ′(t)', fill: '#8b5cf6', fontSize: 12, position: 'insideBottomRight', fontWeight: 'bold' }} />
                   <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} />
-                  <Line type="linear" dataKey="v" name="y''(t)" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} />
+                  <Line type="linear" dataKey="v" name="y''(t) (partie continue = 0)" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </ChartFrame>
-            <div className="p-4 bg-muted/30 border-t border-border">
-              <p className="font-mono text-sm text-foreground">
-                y″(t) = −δ(t+1) + 2·δ′(t) + δ(t−1)
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Trois contributions de Diracs : aux extrémités (t=±1) et un doublet de Dirac en t = 0.
-              </p>
+            <div className="p-4 bg-muted/30 border-t border-border space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Expression analytique</p>
+              <p className="font-mono text-sm text-foreground">y″(t) = −δ(t+1) + δ(t−1) + 2·δ′(t)</p>
+              <ul className="text-xs text-muted-foreground space-y-1 mt-2 list-disc list-inside">
+                <li><span className="font-mono text-foreground">−δ(t+1)</span> en t = −1 : saut de y′ de 0 → −1</li>
+                <li><span className="font-mono text-foreground">+δ(t−1)</span> en t = +1 : saut de y′ de −1 → 0</li>
+                <li><span className="font-mono text-foreground">2·δ′(t)</span> en t = 0 : doublet (dérivée du Dirac 2·δ provenant du saut de y)</li>
+              </ul>
             </div>
           </>
         )}
