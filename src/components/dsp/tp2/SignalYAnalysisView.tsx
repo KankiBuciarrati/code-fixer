@@ -42,21 +42,12 @@ const yPrime = (t: number): number => {
   return 0;
 };
 
-// Diracs of y'(t)
-const D1_DIRACS = [{ t: 0, weight: 2 }];
-
-// ─── Analytical second derivative ────────────────────────────────────────────
-// y''(t) = continuous part is 0 everywhere
-//        + δ(t+1)   (jump of y' from 0 to -1 at t=-1: weight = -1... wait)
-// Let's recompute: y'(t) = -1·[u(t+1) - u(t)] + -1·[u(t) - u(t-1)] + 2·δ(t)
-//                       = -[u(t+1) - u(t-1)] + 2·δ(t)
-// So y''(t) = -δ(t+1) + δ(t-1) + 2·δ'(t)
-const D2_DIRACS = [
-  { t: -1, weight: -1, label: '−δ(t+1)' },
-  { t:  1, weight: +1, label: '+δ(t−1)' },
-];
-// δ'(t) shown separately as a doublet (up then down arrow)
-const D2_DOUBLET = { t: 0, weight: 2 }; // 2·δ'(t)
+// Note on derivatives:
+// y'(t) = -1·[u(t+1) - u(t-1)] + 2·δ(t)
+//        = -1 on ]-1, 1[ continuous part, plus a Dirac of weight +2 at t=0
+// y''(t) = -δ(t+1) + δ(t-1) + 2·δ'(t)
+//        = continuous part is zero everywhere
+//        Diracs at t=±1 (jumps of y') + doublet at t=0 (derivative of Dirac)
 
 // ─── Fourier Transform (numerical) ───────────────────────────────────────────
 // Y(f) computed analytically:
