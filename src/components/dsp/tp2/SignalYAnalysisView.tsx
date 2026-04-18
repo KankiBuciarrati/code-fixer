@@ -32,33 +32,31 @@ const u = (t: number): number => (t >= 0 ? 1 : 0);
 const yDecomp = (t: number): number =>
   -(t + 1) * (u(t + 1) - u(t)) + (1 - t) * (u(t) - u(t - 1));
 
-// ─── Numerical derivatives (finite differences) ──────────────────────────────
-const computeDerivative = (
-  data: { t: number; v: number }[],
-): { t: number; v: number }[] => {
-  if (data.length < 2) return [];
-  const out: { t: number; v: number }[] = [];
-  for (let i = 1; i < data.length - 1; i++) {
-    const dt = data[i + 1].t - data[i - 1].t;
-    out.push({ t: data[i].t, v: (data[i + 1].v - data[i - 1].v) / dt });
-  }
-  return out;
+// ─── Analytical first derivative ─────────────────────────────────────────────
+// y'(t) = -1  for t ∈ ]-1, 0[ ∪ ]0, 1[
+//       = 0   elsewhere (continuous part)
+//       + 2·δ(t)   (Dirac from the +2 jump at t=0)
+const yPrime = (t: number): number => {
+  if (t > -1 && t < 0) return -1;
+  if (t > 0  && t < 1) return -1;
+  return 0;
 };
 
-// Detect jumps to display Dirac impulses
-const detectJumps = (
-  data: { t: number; v: number }[],
-  threshold = 0.5,
-): { t: number; weight: number }[] => {
-  const jumps: { t: number; weight: number }[] = [];
-  for (let i = 1; i < data.length; i++) {
-    const diff = data[i].v - data[i - 1].v;
-    if (Math.abs(diff) > threshold) {
-      jumps.push({ t: (data[i].t + data[i - 1].t) / 2, weight: diff });
-    }
-  }
-  return jumps;
-};
+// Diracs of y'(t)
+const D1_DIRACS = [{ t: 0, weight: 2 }];
+
+// ─── Analytical second derivative ────────────────────────────────────────────
+// y''(t) = continuous part is 0 everywhere
+//        + δ(t+1)   (jump of y' from 0 to -1 at t=-1: weight = -1... wait)
+// Let's recompute: y'(t) = -1·[u(t+1) - u(t)] + -1·[u(t) - u(t-1)] + 2·δ(t)
+//                       = -[u(t+1) - u(t-1)] + 2·δ(t)
+// So y''(t) = -δ(t+1) + δ(t-1) + 2·δ'(t)
+const D2_DIRACS = [
+  { t: -1, weight: -1, label: '−δ(t+1)' },
+  { t:  1, weight: +1, label: '+δ(t−1)' },
+];
+// δ'(t) shown separately as a doublet (up then down arrow)
+const D2_DOUBLET = { t: 0, weight: 2 }; // 2·δ'(t)
 
 // ─── Fourier Transform (numerical) ───────────────────────────────────────────
 // Y(f) computed analytically:
