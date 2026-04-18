@@ -7,6 +7,7 @@ import { SignalParityView } from '@/components/dsp/SignalParityView';
 import { SignalExo6View } from '@/components/dsp/SignalExo6View';
 import { SawtoothFourierView } from '@/components/dsp/tp2/SawtoothFourierView';
 import { FourierTransformView } from '@/components/dsp/tp2/FourierTransformView';
+import { SignalYAnalysisView } from '@/components/dsp/tp2/SignalYAnalysisView';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -78,6 +79,13 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Transformée de Fourier – Propriétés',
         description: 'TF des signaux via propriétés, spectres d\'amplitude et de phase',
         component: FourierTransformView,
+      },
+      {
+        id: 'tp2-exo3',
+        number: 3,
+        title: 'Analyse du signal y(t)',
+        description: 'Décomposition R/u, dérivées 1ère et 2ème, transformée de Fourier',
+        component: SignalYAnalysisView,
       },
     ],
   },
