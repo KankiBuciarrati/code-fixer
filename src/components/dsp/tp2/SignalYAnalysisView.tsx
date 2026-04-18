@@ -118,19 +118,14 @@ export const SignalYAnalysisView: React.FC = () => {
     }));
   }, []);
 
-  // ── Derivatives ──
+  // ── First derivative (analytical, continuous part only) ──
   const d1Data = useMemo(() => {
-    const raw = signalData.map((d) => ({ t: d.t, v: d.original }));
-    return computeDerivative(raw);
-  }, [signalData]);
-
-  const d1Jumps = useMemo(
-    () => detectJumps(signalData.map((d) => ({ t: d.t, v: d.original })), 0.5),
-    [signalData],
-  );
-
-  const d2Data = useMemo(() => computeDerivative(d1Data), [d1Data]);
-  const d2Jumps = useMemo(() => detectJumps(d1Data, 0.5), [d1Data]);
+    const t = linspace(-3, 3, 1500);
+    return t.map((ti) => ({
+      t: parseFloat(ti.toFixed(4)),
+      v: yPrime(ti),
+    }));
+  }, []);
 
   // ── Fourier Transform ──
   const fourierData = useMemo(() => {
