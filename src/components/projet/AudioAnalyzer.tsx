@@ -124,8 +124,11 @@ export default function AudioAnalyzer() {
             </Button>
             <Button
               onClick={() => fileRef.current?.click()}
-              variant="outline"
-              className="gap-2 border-white/15 text-white/80 hover:bg-white/5 hover:text-white"
+              className="gap-2"
+              style={{
+                background: "linear-gradient(135deg, #38bdf8, #a78bfa)",
+                color: "white",
+              }}
             >
               <FileAudio size={16} /> Fichier audio
             </Button>
