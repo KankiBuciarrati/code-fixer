@@ -8,6 +8,7 @@ import { SignalExo6View } from '@/components/dsp/SignalExo6View';
 import { SawtoothFourierView } from '@/components/dsp/tp2/SawtoothFourierView';
 import { FourierTransformView } from '@/components/dsp/tp2/FourierTransformView';
 import { SignalYAnalysisView } from '@/components/dsp/tp2/SignalYAnalysisView';
+import AudioAnalyzer from '@/components/projet/AudioAnalyzer';
 
 export const TP_SECTIONS: TPSection[] = [
   {
@@ -86,6 +87,21 @@ export const TP_SECTIONS: TPSection[] = [
         title: 'Analyse du signal y(t)',
         description: 'Décomposition R/u, dérivées 1ère et 2ème, transformée de Fourier',
         component: SignalYAnalysisView,
+      },
+    ],
+  },
+  {
+    id: 'projet',
+    number: 3,
+    title: 'Projet — Audio Analyzer',
+    description: 'Analyse audio temps réel : forme d\'onde, FFT, bandes et BPM',
+    exercises: [
+      {
+        id: 'projet-audio-analyzer',
+        number: 1,
+        title: 'Audio Analyzer',
+        description: 'Microphone ou fichier — waveform, spectre FFT, énergie par bandes et estimation du BPM',
+        component: AudioAnalyzer,
       },
     ],
   },

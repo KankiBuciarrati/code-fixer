@@ -69,7 +69,9 @@ export const DspSidebar: React.FC<DspSidebarProps> = ({
                 `}
               >
                 <div className="flex-1 min-w-0">
-                  <span className="text-xs font-bold text-primary tracking-wider">TP {tp.number}</span>
+                  <span className="text-xs font-bold text-primary tracking-wider">
+                    {tp.id === 'projet' ? 'PROJET' : `TP ${tp.number}`}
+                  </span>
                   <p className="text-sm font-medium mt-0.5 truncate">{tp.title}</p>
                 </div>
                 <ChevronDown
