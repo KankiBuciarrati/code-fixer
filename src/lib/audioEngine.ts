@@ -153,5 +153,7 @@ export class AudioEngine {
     this.analyser = null;
     this.beatTimes = [];
     this.lastEnergy = 0;
+    this.energyHistory = [];
+    this.lastBeatTime = 0;
   }
 }
