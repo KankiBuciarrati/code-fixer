@@ -100,22 +100,47 @@ export class AudioEngine {
     };
   }
 
+  private energyHistory: number[] = [];
+  private lastBeatTime = 0;
+
   private detectBeat(bassEnergy: number): number | null {
     const now = performance.now();
-    if (bassEnergy > 0.6 && bassEnergy > this.lastEnergy * 1.3) {
-      this.beatTimes.push(now);
-      if (this.beatTimes.length > 8) this.beatTimes.shift();
-    }
-    this.lastEnergy = bassEnergy;
 
-    if (this.beatTimes.length < 4) return null;
+    // Maintain a rolling 1s window of bass energy samples (~60 fps -> 60 samples)
+    this.energyHistory.push(bassEnergy);
+    if (this.energyHistory.length > 60) this.energyHistory.shift();
+
+    const avgEnergy =
+      this.energyHistory.reduce((a, b) => a + b, 0) / this.energyHistory.length;
+
+    // Refractory period: at 200 BPM max -> 300ms minimum between beats
+    const sinceLast = now - this.lastBeatTime;
+    const isBeat =
+      bassEnergy > 0.15 &&
+      bassEnergy > avgEnergy * 1.35 &&
+      sinceLast > 300;
+
+    if (isBeat) {
+      this.beatTimes.push(now);
+      this.lastBeatTime = now;
+      // Keep only beats from the last 5 seconds
+      this.beatTimes = this.beatTimes.filter((t) => now - t < 5000);
+    } else {
+      // Drop very stale beats even without new ones
+      this.beatTimes = this.beatTimes.filter((t) => now - t < 5000);
+    }
+
+    if (this.beatTimes.length < 3) return null;
+
     const intervals: number[] = [];
     for (let i = 1; i < this.beatTimes.length; i++) {
       intervals.push(this.beatTimes[i] - this.beatTimes[i - 1]);
     }
-    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const bpm = Math.round(60000 / avgInterval);
-    return bpm > 40 && bpm < 220 ? bpm : null;
+    // Median is more robust than mean
+    intervals.sort((a, b) => a - b);
+    const median = intervals[Math.floor(intervals.length / 2)];
+    const bpm = Math.round(60000 / median);
+    return bpm >= 50 && bpm <= 200 ? bpm : null;
   }
 
   stop() {
@@ -128,5 +153,7 @@ export class AudioEngine {
     this.analyser = null;
     this.beatTimes = [];
     this.lastEnergy = 0;
+    this.energyHistory = [];
+    this.lastBeatTime = 0;
   }
 }
