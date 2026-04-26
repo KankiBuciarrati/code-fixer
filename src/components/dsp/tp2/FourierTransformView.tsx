@@ -9,53 +9,13 @@ import {
 import { callPython } from '@/lib/pyodideRuntime';
 import { usePyodide } from '@/hooks/usePyodide';
 
-// --- Primitive signals ---
-const Rect = (t: number): number => Math.abs(t) < 0.5 ? 1 : (Math.abs(t) === 0.5 ? 0.5 : 0);
-const Tri = (t: number): number => Math.abs(t) < 1 ? 1 - Math.abs(t) : 0;
-
-// --- Signals ---
-const x = (t: number) => Math.cos(6 * Math.PI * t);
-const x1 = (t: number) => Tri(2 * t);
-const x2 = (t: number) => Rect((t - 1) / 2) - Rect((t + 1) / 2);
-const x3 = (t: number) => Tri(t - 1) - Tri(t + 1);
-const x4 = (t: number) => Rect(t / 2) - Tri(t);
-
-// --- Fourier Transforms (analytical, via properties) ---
-// TF[cos(2πf₀t)] = ½[δ(f-f₀) + δ(f+f₀)], f₀=3
-// For plotting we use sinc-based approximations for continuous spectra
-
-// sinc(x) = sin(πx)/(πx)
-const sinc = (x: number): number => {
-  if (Math.abs(x) < 1e-10) return 1;
-  return Math.sin(Math.PI * x) / (Math.PI * x);
-};
-
-// TF[Rect(t)] = sinc(f)
-// TF[Tri(t)] = sinc²(f)
-// Properties used:
-// Changement d'échelle: x(at) -> (1/|a|)X(f/a)
-// Décalage temporel: x(t-t₀) -> X(f)·e^{-j2πft₀}
-// Linéarité: ax(t)+by(t) -> aX(f)+bY(f)
-
-// X(f) = cos(6πt) -> ½[δ(f-3)+δ(f+3)]  (impulses, shown as tall spikes)
-// X1(f) = Tri(2t) -> (1/2)sinc²(f/2)
-// X2(f) = Rect((t-1)/2) - Rect((t+1)/2)
-//       = 2sinc(2f)e^{-j2πf} - 2sinc(2f)e^{j2πf}
-//       = 2sinc(2f)·(-2j·sin(2πf)) = -4j·sinc(2f)·sin(2πf)
-//       |X2| = 4|sinc(2f)·sin(2πf)|, phase = -π/2 sign(sin(2πf))
-// X3(f) = sinc²(f)e^{-j2πf} - sinc²(f)e^{j2πf} = -2j·sinc²(f)·sin(2πf)
-//       |X3| = 2|sinc²(f)·sin(2πf)|
-// X4(f) = 2sinc(2f) - sinc²(f)
-
 interface SignalDef {
   name: string;
+  pyKey: string;
   label: string;
   formula: string;
   tfFormula: string;
   tfProperties: string[];
-  timeFn: (t: number) => number;
-  ampFn: (f: number) => number;
-  phaseFn: (f: number) => number;
   hasImpulse?: boolean;
   impulses?: { f: number; weight: number }[];
 }
@@ -63,18 +23,17 @@ interface SignalDef {
 const signals: SignalDef[] = [
   {
     name: 'x',
+    pyKey: 'x',
     label: 'x(t) = cos(6πt)',
     formula: 'x(t) = cos(2π·3·t)',
     tfFormula: 'X(f) = ½[δ(f−3) + δ(f+3)]',
     tfProperties: ['Directe: TF[cos(2πf₀t)] = ½[δ(f−f₀) + δ(f+f₀)]'],
-    timeFn: x,
-    ampFn: () => 0, // continuous part is zero
-    phaseFn: () => 0,
     hasImpulse: true,
     impulses: [{ f: 3, weight: 0.5 }, { f: -3, weight: 0.5 }],
   },
   {
     name: 'x1',
+    pyKey: 'x1',
     label: 'x₁(t) = Tri(2t)',
     formula: 'x₁(t) = Tri(2t)',
     tfFormula: 'X₁(f) = ½ sinc²(f/2)',
@@ -83,12 +42,10 @@ const signals: SignalDef[] = [
       'Changement d\'échelle: x(at) → (1/|a|)X(f/a)',
       'Donc TF[Tri(2t)] = (1/2)sinc²(f/2)',
     ],
-    timeFn: x1,
-    ampFn: (f: number) => 0.5 * sinc(f / 2) ** 2,
-    phaseFn: () => 0,
   },
   {
     name: 'x2',
+    pyKey: 'x2',
     label: 'x₂(t) = Rect((t−1)/2) − Rect((t+1)/2)',
     formula: 'x₂(t) = Rect((t−1)/2) − Rect((t+1)/2)',
     tfFormula: 'X₂(f) = −4j·sinc(2f)·sin(2πf)',
@@ -98,16 +55,10 @@ const signals: SignalDef[] = [
       'Décalage: x(t−t₀) → X(f)·e^{−j2πft₀}',
       'X₂ = 2sinc(2f)[e^{−j2πf} − e^{j2πf}] = −4j·sinc(2f)·sin(2πf)',
     ],
-    timeFn: x2,
-    ampFn: (f: number) => 4 * Math.abs(sinc(2 * f) * Math.sin(2 * Math.PI * f)),
-    phaseFn: (f: number) => {
-      const val = sinc(2 * f) * Math.sin(2 * Math.PI * f);
-      if (Math.abs(val) < 1e-10) return 0;
-      return val > 0 ? -90 : 90; // -π/2 or π/2
-    },
   },
   {
     name: 'x3',
+    pyKey: 'x3',
     label: 'x₃(t) = Tri(t−1) − Tri(t+1)',
     formula: 'x₃(t) = Tri(t−1) − Tri(t+1)',
     tfFormula: 'X₃(f) = −2j·sinc²(f)·sin(2πf)',
@@ -116,16 +67,10 @@ const signals: SignalDef[] = [
       'Décalage: x(t−t₀) → X(f)·e^{−j2πft₀}',
       'X₃ = sinc²(f)[e^{−j2πf} − e^{j2πf}] = −2j·sinc²(f)·sin(2πf)',
     ],
-    timeFn: x3,
-    ampFn: (f: number) => 2 * Math.abs(sinc(f) ** 2 * Math.sin(2 * Math.PI * f)),
-    phaseFn: (f: number) => {
-      const val = sinc(f) ** 2 * Math.sin(2 * Math.PI * f);
-      if (Math.abs(val) < 1e-10) return 0;
-      return val > 0 ? -90 : 90;
-    },
   },
   {
     name: 'x4',
+    pyKey: 'x4',
     label: 'x₄(t) = Rect(t/2) − Tri(t)',
     formula: 'x₄(t) = Rect(t/2) − Tri(t)',
     tfFormula: 'X₄(f) = 2sinc(2f) − sinc²(f)',
@@ -134,13 +79,6 @@ const signals: SignalDef[] = [
       'Changement d\'échelle: Rect(t/2) → 2sinc(2f)',
       'Linéarité: X₄ = 2sinc(2f) − sinc²(f)',
     ],
-    timeFn: x4,
-    ampFn: (f: number) => Math.abs(2 * sinc(2 * f) - sinc(f) ** 2),
-    phaseFn: (f: number) => {
-      const val = 2 * sinc(2 * f) - sinc(f) ** 2;
-      if (Math.abs(val) < 1e-10) return 0;
-      return val < 0 ? 180 : 0;
-    },
   },
 ];
 
@@ -151,29 +89,34 @@ const CHART_STYLE = {
   tooltip: { background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 },
 };
 
+interface TimePt { t: number; value: number; }
+interface FreqPt { f: number; amplitude: number; phase: number; }
+
 export const FourierTransformView: React.FC = () => {
   const [selected, setSelected] = useState(0);
   const sig = signals[selected];
+  const py = usePyodide();
 
-  const timeData = useMemo(() => {
-    const t = linspace(-3, 3, 800);
-    return t.map(ti => ({
-      t: parseFloat(ti.toFixed(4)),
-      value: sig.timeFn(ti),
-    }));
-  }, [sig]);
+  const [timeData, setTimeData] = useState<TimePt[]>([]);
+  const [freqData, setFreqData] = useState<FreqPt[]>([]);
 
-  const freqData = useMemo(() => {
-    const f = linspace(-6, 6, 800);
-    return f.map(fi => ({
-      f: parseFloat(fi.toFixed(4)),
-      amplitude: sig.ampFn(fi),
-      phase: sig.phaseFn(fi),
-    }));
-  }, [sig]);
+  useEffect(() => {
+    if (!py.ready) return;
+    let cancelled = false;
+    (async () => {
+      const [td, fd] = await Promise.all([
+        callPython<TimePt[]>('tp2_time_series', [sig.pyKey, -3, 3, 800]),
+        callPython<FreqPt[]>('tp2_freq_series', [sig.pyKey, -6, 6, 800]),
+      ]);
+      if (cancelled) return;
+      setTimeData(td);
+      setFreqData(fd);
+    })();
+    return () => { cancelled = true; };
+  }, [sig.pyKey, py.ready]);
 
   // For impulse signals, create spike data
-  const impulseData = useMemo(() => {
+  const impulseData = (() => {
     if (!sig.hasImpulse || !sig.impulses) return [];
     const pts: { f: number; amplitude: number }[] = [];
     sig.impulses.forEach(imp => {
@@ -182,7 +125,7 @@ export const FourierTransformView: React.FC = () => {
       pts.push({ f: imp.f + 0.001, amplitude: 0 });
     });
     return pts.sort((a, b) => a.f - b.f);
-  }, [sig]);
+  })();
 
   return (
     <div className="space-y-6">
