@@ -226,3 +226,208 @@ def format_energy(energy) -> str:
     if abs(energy) < 1e-3 or abs(energy) > 1e3:
         return f"{energy:.3e}"
     return f"{energy:.3f}"
+
+
+# ─── TP2 Exo 1 : Signal dent de scie ─────────────────────────────────────────
+
+def sawtooth_value(t: float, period: float = 2.0) -> float:
+    """Dent de scie 0→1 sur une période."""
+    return t / period - math.floor(t / period)
+
+
+def sawtooth_fourier_coeff(n: int) -> Dict[str, float]:
+    """Coefficients complexes c_n pour dent de scie [0,1] de période T.
+    c_0 = 1/2 ; c_n = j/(2πn) pour n != 0.
+    """
+    if n == 0:
+        return {"re": 0.5, "im": 0.0, "mag": 0.5, "phase": 0.0}
+    re = 0.0
+    im = 1.0 / (2 * math.pi * n)
+    mag = 1.0 / (2 * math.pi * abs(n))
+    phase = math.atan2(im, re)
+    return {"re": re, "im": im, "mag": mag, "phase": phase}
+
+
+def sawtooth_reconstruct(t_start: float, t_end: float, num_points: int,
+                         num_harmonics: int, period: float = 2.0) -> Dict[str, List[float]]:
+    """Calcule x(t), reconstruction de Fourier sur N harmoniques, puissance num/anal."""
+    w0 = 2 * math.pi / period
+    ts = linspace(t_start, t_end, num_points)
+    original = [sawtooth_value(t, period) for t in ts]
+    reconstructed: List[float] = []
+    for t in ts:
+        s = 0.5
+        for n in range(1, num_harmonics + 1):
+            s += -math.sin(n * w0 * t) / (math.pi * n)
+        reconstructed.append(s)
+    return {"t": ts, "original": original, "reconstructed": reconstructed}
+
+
+def sawtooth_spectrum(num_harmonics: int) -> List[Dict[str, float]]:
+    out = []
+    for n in range(-num_harmonics, num_harmonics + 1):
+        c = sawtooth_fourier_coeff(n)
+        out.append({"n": n, "amplitude": c["mag"], "phase": c["phase"] * 180.0 / math.pi})
+    return out
+
+
+def sawtooth_trigo_coeffs(num_harmonics: int) -> List[Dict[str, float]]:
+    out = []
+    for n in range(1, min(num_harmonics, 12) + 1):
+        bn = -1.0 / (math.pi * n)
+        an = 0.0
+        An = 1.0 / (math.pi * n)
+        out.append({"n": n, "a_n": an, "b_n": round(bn, 6), "A_n": round(An, 6), "phi_n": 90})
+    return out
+
+
+def sawtooth_power(num_harmonics: int) -> Dict[str, float]:
+    """Puissance numérique (Parseval) et analytique (1/3)."""
+    p = 0.25  # |c0|^2
+    for n in range(1, num_harmonics + 1):
+        p += 2 * (1.0 / (2 * math.pi * n)) ** 2
+    return {"numeric": p, "analytic": 1.0 / 3.0}
+
+
+# ─── TP2 Exo 2 : TF par propriétés (signaux x, x1..x4) ───────────────────────
+
+def _sinc(x: float) -> float:
+    if abs(x) < 1e-10:
+        return 1.0
+    return math.sin(math.pi * x) / (math.pi * x)
+
+
+def _rect_tp2(t: float) -> float:
+    a = abs(t)
+    if a < 0.5:
+        return 1.0
+    if a == 0.5:
+        return 0.5
+    return 0.0
+
+
+def _tri_tp2(t: float) -> float:
+    return 1.0 - abs(t) if abs(t) < 1.0 else 0.0
+
+
+_TP2_TIME = {
+    "x":  lambda t: math.cos(6 * math.pi * t),
+    "x1": lambda t: _tri_tp2(2 * t),
+    "x2": lambda t: _rect_tp2((t - 1) / 2) - _rect_tp2((t + 1) / 2),
+    "x3": lambda t: _tri_tp2(t - 1) - _tri_tp2(t + 1),
+    "x4": lambda t: _rect_tp2(t / 2) - _tri_tp2(t),
+}
+
+
+def _tp2_amp(name: str, f: float) -> float:
+    if name == "x":
+        return 0.0
+    if name == "x1":
+        return 0.5 * _sinc(f / 2) ** 2
+    if name == "x2":
+        return 4 * abs(_sinc(2 * f) * math.sin(2 * math.pi * f))
+    if name == "x3":
+        return 2 * abs(_sinc(f) ** 2 * math.sin(2 * math.pi * f))
+    if name == "x4":
+        return abs(2 * _sinc(2 * f) - _sinc(f) ** 2)
+    return 0.0
+
+
+def _tp2_phase(name: str, f: float) -> float:
+    if name in ("x", "x1"):
+        return 0.0
+    if name == "x2":
+        val = _sinc(2 * f) * math.sin(2 * math.pi * f)
+        if abs(val) < 1e-10:
+            return 0.0
+        return -90.0 if val > 0 else 90.0
+    if name == "x3":
+        val = (_sinc(f) ** 2) * math.sin(2 * math.pi * f)
+        if abs(val) < 1e-10:
+            return 0.0
+        return -90.0 if val > 0 else 90.0
+    if name == "x4":
+        val = 2 * _sinc(2 * f) - _sinc(f) ** 2
+        if abs(val) < 1e-10:
+            return 0.0
+        return 180.0 if val < 0 else 0.0
+    return 0.0
+
+
+def tp2_time_series(name: str, t_start: float, t_end: float, num_points: int) -> List[Dict[str, float]]:
+    fn = _TP2_TIME[name]
+    ts = linspace(t_start, t_end, num_points)
+    return [{"t": round(t, 4), "value": fn(t)} for t in ts]
+
+
+def tp2_freq_series(name: str, f_start: float, f_end: float, num_points: int) -> List[Dict[str, float]]:
+    fs = linspace(f_start, f_end, num_points)
+    return [{"f": round(f, 4), "amplitude": _tp2_amp(name, f), "phase": _tp2_phase(name, f)} for f in fs]
+
+
+# ─── TP2 Exo 3 : Signal y(t) ─────────────────────────────────────────────────
+
+def _y(t: float) -> float:
+    if -1 <= t < 0:
+        return -(t + 1)
+    if 0 <= t <= 1:
+        return 1 - t
+    return 0.0
+
+
+def _u_step(t: float) -> float:
+    return 1.0 if t >= 0 else 0.0
+
+
+def _y_block1(t: float) -> float:
+    return -(t + 1) * (_u_step(t + 1) - _u_step(t))
+
+
+def _y_block2(t: float) -> float:
+    return (1 - t) * (_u_step(t) - _u_step(t - 1))
+
+
+def _y_prime(t: float) -> float:
+    if -1 < t < 0 or 0 < t < 1:
+        return -1.0
+    return 0.0
+
+
+def _Y_imag(f: float) -> float:
+    if abs(f) < 1e-6:
+        return 0.0
+    return (2 * math.sin(2 * math.pi * f) - 4 * math.pi * f) / (4 * math.pi * math.pi * f * f)
+
+
+def y_time_series(t_start: float, t_end: float, num_points: int) -> List[Dict[str, float]]:
+    ts = linspace(t_start, t_end, num_points)
+    out = []
+    for t in ts:
+        out.append({
+            "t": round(t, 4),
+            "y": _y(t),
+            "decomp": _y_block1(t) + _y_block2(t),
+            "b1": _y_block1(t),
+            "b2": _y_block2(t),
+            "yp": _y_prime(t),
+        })
+    return out
+
+
+def y_freq_series(f_start: float, f_end: float, num_points: int) -> List[Dict[str, float]]:
+    fs = linspace(f_start, f_end, num_points)
+    out = []
+    for f in fs:
+        im = _Y_imag(f)
+        mag = abs(im)
+        if abs(im) < 1e-9:
+            phase = 0.0
+        else:
+            phase = (math.pi / 2) if im > 0 else -math.pi / 2
+        out.append({
+            "f": round(f, 4),
+            "mag": mag,
+            "phase": phase / math.pi,
+            "im": im,
+        })
+    return out
