@@ -94,7 +94,7 @@ export const EnergyClassificationView: React.FC = () => {
           className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 transition-all text-sm font-semibold"
         >
           <Play size={16} />
-          {loading ? 'En cours...' : 'Classifier (Python)'}
+          {loading ? 'En cours...' : 'Classifier'}
         </button>
       </div>
 
