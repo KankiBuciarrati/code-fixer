@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Slider } from '@/components/ui/slider';
@@ -7,99 +7,47 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, ReferenceLine, Legend, ScatterChart, Scatter,
 } from 'recharts';
-import { linspace } from '@/utils/signalAnalysis';
+import { callPython } from '@/lib/pyodideRuntime';
+import { usePyodide } from '@/hooks/usePyodide';
 
 const T = 2; // période
-const f0 = 1 / T;
-const w0 = 2 * Math.PI * f0;
 
-// Signal dent de scie : x(t) = t/T - floor(t/T) sur une période, amplitude 0→1
-const sawtooth = (t: number): number => {
-  const val = t / T - Math.floor(t / T);
-  return val;
-};
-
-// Coefficients de Fourier complexes c_n pour dent de scie (amplitude 1, période T)
-// x(t) = t/T mod 1  =>  c_0 = 1/2,  c_n = -1/(2πjn) = j/(2πn) pour n≠0
-// |c_n| = 1/(2π|n|), phase(c_n) = π/2 pour n>0, -π/2 pour n<0
-const fourierCoeff = (n: number): { re: number; im: number; mag: number; phase: number } => {
-  if (n === 0) return { re: 0.5, im: 0, mag: 0.5, phase: 0 };
-  const mag = 1 / (2 * Math.PI * Math.abs(n));
-  // c_n = -1/(2πjn) = j/(2πn)
-  const re = 0;
-  const im = 1 / (2 * Math.PI * n);
-  const phase = Math.atan2(im, re);
-  return { re, im, mag, phase };
-};
-
-// Reconstruction par série de Fourier
-const fourierReconstruct = (t: number, N: number): number => {
-  let sum = 0.5; // c_0
-  for (let n = 1; n <= N; n++) {
-    // c_n * e^(jnw0t) + c_{-n} * e^(-jnw0t)
-    // = 2*Re(c_n * e^(jnw0t)) pour signal réel
-    // c_n = j/(2πn) => c_n*e^(jnw0t) = j/(2πn) * (cos(nw0t) + j*sin(nw0t))
-    //   re part = -sin(nw0t)/(2πn), im part = cos(nw0t)/(2πn)
-    // contribution réelle de n et -n: 2 * re part = -sin(nw0t)/(πn)
-    sum += -Math.sin(n * w0 * t) / (Math.PI * n);
-  }
-  return sum;
-};
-
-// Forme trigonométrique: a_0/2 + Σ(a_n cos + b_n sin)
-// a_0 = 1, a_n = 0, b_n = -1/(πn)
-// Forme harmonique: a_0/2 + Σ A_n cos(nw0t + φ_n)
-// A_n = |b_n| = 1/(πn), φ_n = π/2 (car seulement sinus négatif)
+interface TimePoint { t: number; original: number; reconstructed: number; }
+interface SpectrumPoint { n: number; amplitude: number; phase: number; }
+interface TrigoPoint { n: number; a_n: number; b_n: number; A_n: number; phi_n: number; }
 
 export const SawtoothFourierView: React.FC = () => {
   const [numHarmonics, setNumHarmonics] = useState(10);
+  const [timeData, setTimeData] = useState<TimePoint[]>([]);
+  const [spectrumData, setSpectrumData] = useState<SpectrumPoint[]>([]);
+  const [trigoCoeffs, setTrigoCoeffs] = useState<TrigoPoint[]>([]);
+  const [powerNumeric, setPowerNumeric] = useState(0);
+  const [powerAnalytic, setPowerAnalytic] = useState(1 / 3);
+  const py = usePyodide();
 
-  const timeData = useMemo(() => {
-    const t = linspace(-1, 5, 1200);
-    return t.map(ti => ({
-      t: parseFloat(ti.toFixed(4)),
-      original: sawtooth(ti),
-      reconstructed: fourierReconstruct(ti, numHarmonics),
-    }));
-  }, [numHarmonics]);
-
-  const spectrumData = useMemo(() => {
-    const data = [];
-    for (let n = -numHarmonics; n <= numHarmonics; n++) {
-      const c = fourierCoeff(n);
-      data.push({
-        n,
-        amplitude: c.mag,
-        phase: (c.phase * 180) / Math.PI,
-      });
-    }
-    return data;
-  }, [numHarmonics]);
-
-  const trigoCoeffs = useMemo(() => {
-    const data = [];
-    for (let n = 1; n <= Math.min(numHarmonics, 12); n++) {
-      data.push({
-        n,
-        a_n: 0,
-        b_n: parseFloat((-1 / (Math.PI * n)).toFixed(6)),
-        A_n: parseFloat((1 / (Math.PI * n)).toFixed(6)),
-        phi_n: 90,
-      });
-    }
-    return data;
-  }, [numHarmonics]);
-
-  // Puissance moyenne = Σ|c_n|² = 1/4 + 2*Σ(1/(2πn))² = 1/4 + Σ1/(2π²n²)
-  // Analytiquement P = 1/3 (pour dent de scie 0→1)
-  const powerAnalytic = 1 / 3;
-  const powerNumeric = useMemo(() => {
-    let p = 0.25; // |c_0|²
-    for (let n = 1; n <= numHarmonics; n++) {
-      p += 2 * Math.pow(1 / (2 * Math.PI * n), 2);
-    }
-    return p;
-  }, [numHarmonics]);
+  useEffect(() => {
+    if (!py.ready) return;
+    let cancelled = false;
+    (async () => {
+      const recon = await callPython<{ t: number[]; original: number[]; reconstructed: number[] }>(
+        'sawtooth_reconstruct', [-1, 5, 1200, numHarmonics, T]
+      );
+      const spec = await callPython<SpectrumPoint[]>('sawtooth_spectrum', [numHarmonics]);
+      const trigo = await callPython<TrigoPoint[]>('sawtooth_trigo_coeffs', [numHarmonics]);
+      const pow = await callPython<{ numeric: number; analytic: number }>('sawtooth_power', [numHarmonics]);
+      if (cancelled) return;
+      setTimeData(recon.t.map((t, i) => ({
+        t: parseFloat(t.toFixed(4)),
+        original: recon.original[i],
+        reconstructed: recon.reconstructed[i],
+      })));
+      setSpectrumData(spec);
+      setTrigoCoeffs(trigo);
+      setPowerNumeric(pow.numeric);
+      setPowerAnalytic(pow.analytic);
+    })();
+    return () => { cancelled = true; };
+  }, [numHarmonics, py.ready]);
 
   return (
     <div className="space-y-6">
