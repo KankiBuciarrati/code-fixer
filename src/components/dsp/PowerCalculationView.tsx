@@ -90,7 +90,7 @@ export const PowerCalculationView: React.FC = () => {
           className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 transition-all text-sm font-semibold whitespace-nowrap"
         >
           <Zap size={16} />
-          {loading ? 'Calcul...' : 'Calculer (Python)'}
+          {loading ? 'Calcul...' : 'Calculer'}
         </button>
       </div>
 
