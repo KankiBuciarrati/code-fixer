@@ -1,78 +1,39 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, ReferenceLine, Legend, ReferenceDot,
 } from 'recharts';
 import { motion } from 'framer-motion';
 import { Activity, GitBranch, TrendingUp, Waves } from 'lucide-react';
-import { linspace } from '@/utils/signalAnalysis';
-
-// ─── Signal definition ───────────────────────────────────────────────
-// y(t) = -(t+1) on [-1, 0)   →  y(0⁻) = -1
-// y(t) =  1-t   on [0, 1]    →  y(0⁺) = +1   (jump = +2)
-const y = (t: number): number => {
-  if (t >= -1 && t < 0) return -(t + 1);
-  if (t >= 0 && t <= 1) return 1 - t;
-  return 0;
-};
-
-const u = (t: number) => (t >= 0 ? 1 : 0);
-
-// y(t) reconstructed from windowed pieces (R/u decomposition)
-const block1 = (t: number) => -(t + 1) * (u(t + 1) - u(t));   // -(t+1) on [-1, 0)
-const block2 = (t: number) => (1 - t) * (u(t) - u(t - 1));    //  1-t   on [0, 1]
-const yDecomp = (t: number) => block1(t) + block2(t);
-
-// ─── Derivatives ─────────────────────────────────────────────────────
-// y'(t) = -1 on (-1, 0) ∪ (0, 1)  +  2δ(t)
-const yPrime = (t: number): number => {
-  if (t > -1 && t < 0) return -1;
-  if (t > 0 && t < 1) return -1;
-  return 0;
-};
-// y''(t) = -δ(t+1) + δ(t-1) + 2δ'(t)  (no continuous part)
-
-// ─── Fourier Transform (analytical via y'') ──────────────────────────
-// Y''(f) = -e^{+j2πf} + e^{-j2πf} + 2·(j2πf) = -2j·sin(2πf) + j4πf
-// Y(f)   = Y''(f) / (j2πf)² = j·[2·sin(2πf) - 4πf] / (4π²f²)   → purely imaginary
-const Yimag = (f: number): number => {
-  if (Math.abs(f) < 1e-6) return 0; // limit at f→0
-  return (2 * Math.sin(2 * Math.PI * f) - 4 * Math.PI * f) / (4 * Math.PI * Math.PI * f * f);
-};
-const Ymag = (f: number) => Math.abs(Yimag(f));
-const Yphase = (f: number) => {
-  const im = Yimag(f);
-  if (Math.abs(im) < 1e-9) return 0;
-  return im > 0 ? Math.PI / 2 : -Math.PI / 2;
-};
+import { callPython } from '@/lib/pyodideRuntime';
+import { usePyodide } from '@/hooks/usePyodide';
 
 // ─── Component ───────────────────────────────────────────────────────
 type Tab = 'signal' | 'decomp' | 'deriv' | 'fourier';
 
+interface TPt { t: number; y: number; decomp: number; b1: number; b2: number; yp: number; }
+interface FPt { f: number; mag: number; phase: number; im: number; }
+
 export const SignalYAnalysisView: React.FC = () => {
   const [tab, setTab] = useState<Tab>('signal');
+  const py = usePyodide();
+  const [tData, setTData] = useState<TPt[]>([]);
+  const [fData, setFData] = useState<FPt[]>([]);
 
-  const tData = useMemo(() => {
-    const ts = linspace(-3, 3, 1500);
-    return ts.map(t => ({
-      t: parseFloat(t.toFixed(4)),
-      y: y(t),
-      decomp: yDecomp(t),
-      b1: block1(t),
-      b2: block2(t),
-      yp: yPrime(t),
-    }));
-  }, []);
-
-  const fData = useMemo(() => {
-    const fs = linspace(-5, 5, 1500);
-    return fs.map(f => ({
-      f: parseFloat(f.toFixed(4)),
-      mag: Ymag(f),
-      phase: Yphase(f) / Math.PI,
-      im: Yimag(f),
-    }));
-  }, []);
+  useEffect(() => {
+    if (!py.ready) return;
+    let cancelled = false;
+    (async () => {
+      const [td, fd] = await Promise.all([
+        callPython<TPt[]>('y_time_series', [-3, 3, 1500]),
+        callPython<FPt[]>('y_freq_series', [-5, 5, 1500]),
+      ]);
+      if (cancelled) return;
+      setTData(td);
+      setFData(fd);
+    })();
+    return () => { cancelled = true; };
+  }, [py.ready]);
 
   const tabs: { id: Tab; label: string; icon: React.ElementType }[] = [
     { id: 'signal',  label: 'Signal y(t)',        icon: Activity },
