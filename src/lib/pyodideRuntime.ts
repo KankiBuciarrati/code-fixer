@@ -68,10 +68,11 @@ export async function callPython<T = unknown>(
   args: unknown[] = []
 ): Promise<T> {
   const py = await loadPyodideOnce();
-  py.globals.set('__js_args', py.toPy(args));
+  py.globals.set('__js_args_json', JSON.stringify(args));
   const code = `
 import json
-__result = ${funcName}(*__js_args.to_py())
+__args = json.loads(__js_args_json)
+__result = ${funcName}(*__args)
 json.dumps(__result, default=lambda o: None)
 `;
   const jsonStr = py.runPython(code) as string;
