@@ -1,33 +1,72 @@
 import React, { useState } from 'react';
-import { SIGNALS } from '@/signals';
-import { analyzeAllSignals, formatEnergy } from '@/utils/signalAnalysis';
+import { callPython } from '@/lib/pyodideRuntime';
+import { usePyodide } from '@/hooks/usePyodide';
 import { AnalysisResult } from '@/types';
-import { Zap, Play } from 'lucide-react';
+import { Zap, Play, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface PyAnalysisRow {
+  signalName: string;
+  energy: number | null;
+  energyIsInfinite: boolean;
+  classification: string;
+}
+
+function formatEnergyJS(e: number | null, isInf: boolean): string {
+  if (isInf || e === null) return '∞';
+  if (e === 0) return '0';
+  if (Math.abs(e) < 1e-3 || Math.abs(e) > 1e3) return e.toExponential(3);
+  return e.toFixed(3);
+}
 
 export const EnergyClassificationView: React.FC = () => {
   const [method, setMethod] = useState<'trapeze' | 'simpson'>('trapeze');
   const [results, setResults] = useState<AnalysisResult[]>([]);
+  const [rawRows, setRawRows] = useState<PyAnalysisRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const py = usePyodide();
 
-  const handleClassify = () => {
+  const handleClassify = async () => {
+    if (!py.ready) return;
     setLoading(true);
-    setTimeout(() => {
-      const analysisResults = analyzeAllSignals(SIGNALS, method);
-      setResults(analysisResults);
+    try {
+      const rows = await callPython<PyAnalysisRow[]>('analyze_all_signals', [method, -10, 10, 1000]);
+      setRawRows(rows);
+      setResults(
+        rows.map((r) => ({
+          signalName: r.signalName,
+          energy: r.energyIsInfinite ? Infinity : r.energy ?? NaN,
+          classification: r.classification,
+        }))
+      );
+    } finally {
       setLoading(false);
-    }, 100);
+    }
   };
 
-  const energyStats = results.length > 0 ? {
-    energyCount: results.filter(r => !r.classification.includes('puissance')).length,
-    powerCount: results.filter(r => r.classification.includes('puissance')).length,
-    minEnergy: Math.min(...results.filter(r => isFinite(r.energy)).map(r => r.energy)),
-    maxEnergy: Math.max(...results.filter(r => isFinite(r.energy)).map(r => r.energy)),
-  } : null;
+  const energyStats =
+    results.length > 0
+      ? {
+          energyCount: results.filter((r) => !r.classification.includes('puissance')).length,
+          powerCount: results.filter((r) => r.classification.includes('puissance')).length,
+          minEnergy: Math.min(...results.filter((r) => isFinite(r.energy)).map((r) => r.energy)),
+          maxEnergy: Math.max(...results.filter((r) => isFinite(r.energy)).map((r) => r.energy)),
+        }
+      : null;
 
   return (
     <div className="space-y-6">
+      {/* Pyodide status */}
+      <div className="text-xs text-muted-foreground flex items-center gap-2">
+        {py.loading && (
+          <>
+            <Loader2 size={12} className="animate-spin" /> Chargement de Python (Pyodide)…
+          </>
+        )}
+        {py.ready && <span className="text-signal-green">● Runtime Python prêt</span>}
+        {py.error && <span className="text-destructive">Erreur Pyodide : {py.error}</span>}
+      </div>
+
       {/* Method Selection */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -51,11 +90,11 @@ export const EnergyClassificationView: React.FC = () => {
         </div>
         <button
           onClick={handleClassify}
-          disabled={loading}
+          disabled={loading || !py.ready}
           className="flex items-center gap-2 px-5 py-2.5 bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 transition-all text-sm font-semibold"
         >
           <Play size={16} />
-          {loading ? 'En cours...' : 'Classifier'}
+          {loading ? 'En cours...' : 'Classifier (Python)'}
         </button>
       </div>
 
@@ -70,8 +109,8 @@ export const EnergyClassificationView: React.FC = () => {
             {[
               { label: "Signaux d'Énergie", value: energyStats.energyCount, color: 'signal-green' },
               { label: 'Signaux de Puissance', value: energyStats.powerCount, color: 'signal-blue' },
-              { label: 'Min Énergie', value: formatEnergy(energyStats.minEnergy), color: 'primary' },
-              { label: 'Max Énergie', value: formatEnergy(energyStats.maxEnergy), color: 'signal-amber' },
+              { label: 'Min Énergie', value: formatEnergyJS(energyStats.minEnergy, !isFinite(energyStats.minEnergy)), color: 'primary' },
+              { label: 'Max Énergie', value: formatEnergyJS(energyStats.maxEnergy, !isFinite(energyStats.maxEnergy)), color: 'signal-amber' },
             ].map((stat, i) => (
               <motion.div
                 key={stat.label}
@@ -89,12 +128,8 @@ export const EnergyClassificationView: React.FC = () => {
       </AnimatePresence>
 
       {/* Results Table */}
-      {results.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="rounded-xl border border-border overflow-hidden"
-        >
+      {rawRows.length > 0 && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl border border-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -105,7 +140,7 @@ export const EnergyClassificationView: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {results.map((result, idx) => (
+                {rawRows.map((result, idx) => (
                   <motion.tr
                     key={idx}
                     initial={{ opacity: 0, x: -8 }}
@@ -114,7 +149,9 @@ export const EnergyClassificationView: React.FC = () => {
                     className="border-b border-border/50 hover:bg-muted/30 transition-colors"
                   >
                     <td className="px-4 py-3 font-mono font-semibold text-foreground">{result.signalName}</td>
-                    <td className="px-4 py-3 font-mono text-muted-foreground">{formatEnergy(result.energy)}</td>
+                    <td className="px-4 py-3 font-mono text-muted-foreground">
+                      {formatEnergyJS(result.energy, result.energyIsInfinite)}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`inline-flex px-3 py-1 rounded-full text-xs font-semibold ${
