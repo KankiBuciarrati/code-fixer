@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -6,7 +6,8 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Legend,
 } from 'recharts';
-import { linspace } from '@/utils/signalAnalysis';
+import { callPython } from '@/lib/pyodideRuntime';
+import { usePyodide } from '@/hooks/usePyodide';
 
 // --- Primitive signals ---
 const Rect = (t: number): number => Math.abs(t) < 0.5 ? 1 : (Math.abs(t) === 0.5 ? 0.5 : 0);
